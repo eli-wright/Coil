@@ -1,0 +1,904 @@
+import React, { useState, useEffect, useMemo } from 'react';
+import { Thermometer, Droplets, Wind, Scaling, CheckCircle, XCircle, Sparkles, HelpCircle, Layers, FileDown, Award, BarChartHorizontal, GitCompareArrows, RefreshCw, Bot, Edit, AlertTriangle, ShieldAlert } from 'lucide-react';
+
+// --- Engineering Constants and Properties ---
+
+const PIPE_PROPS = {
+    '1.5in Sch 40': { od: 1.900, id: 1.610, area_ft: 0.01414 },
+    '1.5in Sch 80': { od: 1.900, id: 1.500, area_ft: 0.01227 },
+    '2in Sch 40':   { od: 2.375, id: 2.067, area_ft: 0.02333 },
+    '2in Sch 80':   { od: 2.375, id: 1.939, area_ft: 0.02050 },
+    '2.5in Sch 40': { od: 2.875, id: 2.469, area_ft: 0.03326 },
+    '2.5in Sch 80': { od: 2.875, id: 2.323, area_ft: 0.02954 },
+};
+
+const HFG_50F_NH3 = 525.8; // Btu/lb
+
+const AMMONIA_SAT_PROPS = [
+    { temp: -40, rho: 41.85, cp: 1.053, mu: 0.840, k: 0.368, psat: 10.41, hfg: 597.6 }, { temp: -30, rho: 41.51, cp: 1.058, mu: 0.774, k: 0.362, psat: 15.72, hfg: 589.9 },
+    { temp: -20, rho: 41.17, cp: 1.064, mu: 0.718, k: 0.355, psat: 22.95, hfg: 582.3 }, { temp: -10, rho: 40.82, cp: 1.071, mu: 0.669, k: 0.348, psat: 32.49, hfg: 574.6 },
+    { temp: 0,   rho: 40.47, cp: 1.078, mu: 0.626, k: 0.341, psat: 44.79, hfg: 568.9 }, { temp: 10,  rho: 40.11, cp: 1.086, mu: 0.587, k: 0.334, psat: 60.37, hfg: 561.1 },
+    { temp: 20,  rho: 39.75, cp: 1.095, mu: 0.552, k: 0.326, psat: 79.82, hfg: 554.6 }, { temp: 30,  rho: 39.38, cp: 1.104, mu: 0.521, k: 0.318, psat: 103.8, hfg: 546.9 },
+    { temp: 40,  rho: 39.01, cp: 1.114, mu: 0.492, k: 0.310, psat: 133.0, hfg: 539.3 }, { temp: 50,  rho: 38.63, cp: 1.125, mu: 0.466, k: 0.302, psat: 168.3, hfg: 531.5 },
+    { temp: 60,  rho: 38.24, cp: 1.137, mu: 0.442, k: 0.293, psat: 210.5, hfg: 522.8 }, { temp: 70,  rho: 37.85, cp: 1.149, mu: 0.420, k: 0.284, psat: 260.5, hfg: 514.2 },
+    { temp: 80,  rho: 37.45, cp: 1.162, mu: 0.400, k: 0.275, psat: 319.2, hfg: 504.6 }, { temp: 90,  rho: 37.04, cp: 1.176, mu: 0.381, k: 0.266, psat: 387.7, hfg: 494.8 },
+    { temp: 100, rho: 36.62, cp: 1.191, mu: 0.364, k: 0.256, psat: 467.0, hfg: 484.1 },
+];
+const AMMONIA_CRITICAL_PRESSURE_PSI = 1636.4;
+const HEAT_FLUX_WARNING_THRESHOLD = 30000; // Btu/hr-ft^2
+
+// --- Helper Functions ---
+
+const getAmmoniaProps = (tempF) => {
+    let lower = AMMONIA_SAT_PROPS[0], upper = AMMONIA_SAT_PROPS[AMMONIA_SAT_PROPS.length - 1];
+    if (tempF <= lower.temp) return { ...lower, mu_lb_ft_s: lower.mu / 3600, mu_cP: lower.mu / 2.4191, pr: (lower.cp * lower.mu) / lower.k };
+    if (tempF >= upper.temp) return { ...upper, mu_lb_ft_s: upper.mu / 3600, mu_cP: upper.mu / 2.4191, pr: (upper.cp * upper.mu) / upper.k };
+    for (let i = 0; i < AMMONIA_SAT_PROPS.length - 1; i++) {
+        if (tempF >= AMMONIA_SAT_PROPS[i].temp && tempF <= AMMONIA_SAT_PROPS[i+1].temp) {
+            lower = AMMONIA_SAT_PROPS[i]; upper = AMMONIA_SAT_PROPS[i+1]; break;
+        }
+    }
+    const range = upper.temp - lower.temp, ratio = range > 0 ? (tempF - lower.temp) / range : 0;
+    const interpolate = (key) => lower[key] + ratio * (upper[key] - lower[key]);
+    const cp = interpolate('cp'), rho = interpolate('rho'), mu_lbm_ft_h = interpolate('mu'), k = interpolate('k'), psat = interpolate('psat'), hfg = interpolate('hfg');
+    const mu_lb_ft_s = mu_lbm_ft_h / 3600, mu_cP = mu_lbm_ft_h / 2.4191;
+    const pr = (cp * mu_lbm_ft_h) / k;
+    return { cp, rho, mu_cP, mu_lbm_ft_h, mu_lb_ft_s, k, pr, psat, hfg };
+};
+
+const calculateHo = (heatFlux, operatingPressure) => {
+    if (operatingPressure <= 0) return 0;
+    if (heatFlux <= 1) return 1; 
+    const Pr = operatingPressure / AMMONIA_CRITICAL_PRESSURE_PSI; 
+    const F_Pr = 1.8 * Math.pow(Pr, 0.17) + 4 * Math.pow(Pr, 1.2) + 10 * Math.pow(Pr, 10);
+    const ho = 0.0055 * Math.pow(AMMONIA_CRITICAL_PRESSURE_PSI, 0.69) * Math.pow(heatFlux, 0.7) * F_Pr;
+    return ho;
+};
+
+const fetchWithRetry = async (url, options, retries = 3, backoff = 500) => {
+    for (let i = 0; i < retries; i++) {
+        try {
+            const response = await fetch(url, options);
+            if (!response.ok) {
+                const errorBody = await response.text();
+                const error = new Error(`API Error: ${response.status} - ${errorBody}`);
+                error.status = response.status;
+                throw error;
+            }
+            return response; 
+        } catch (error) {
+            if (error.status >= 400 && error.status < 500) { throw error; }
+            if (i === retries - 1) throw error; 
+            await new Promise(res => setTimeout(res, backoff * Math.pow(2, i)));
+        }
+    }
+};
+
+const calculatePerformance = (inputData) => {
+    const inputs = Object.entries(inputData).reduce((acc, [key, value]) => {
+        if (!['pipeSize', 'projectName', 'nominalPipeSize', 'pipeSchedule', 'calculationMode', 'designMode'].includes(key)) acc[key] = parseFloat(value) || 0;
+        else acc[key] = value;
+        return acc;
+    }, {});
+
+    const { massFlowTotal, tempIn, tempOut, tempBath, coilOD, coilHeight, numWounds, numTurns, foulingInside, foulingOutside, pipeK, vesselID } = inputs;
+    
+    const safeNumWounds = Math.max(1, parseInt(numWounds, 10) || 1);
+    const safeNumTurns = Math.max(2, parseInt(numTurns, 10) || 2);
+    const pipe = PIPE_PROPS[inputData.pipeSize] || PIPE_PROPS['2in Sch 80']; 
+    
+    const pitch = safeNumTurns > 1 ? (coilHeight - pipe.od) / (safeNumTurns - 1) : coilHeight;
+    const pitchValid = pitch >= pipe.od;
+
+    const pipe_Di_ft = pipe.id / 12, pipe_Do_ft = pipe.od / 12;
+    const helixCenterlineDia = coilOD - pipe.od;
+    const lengthPerTurn = (Math.PI * helixCenterlineDia) / 12;
+    const areaPerFoot = Math.PI * pipe_Do_ft;
+    const providedArea = safeNumWounds * safeNumTurns * lengthPerTurn * areaPerFoot;
+    const totalLengthPerPath = safeNumTurns * lengthPerTurn;
+    
+    const operatingPressure = getAmmoniaProps(tempBath).psat;
+    const isSubcooler = inputData.designMode === 'subcooler';
+    
+    const m_dot_hr = massFlowTotal * 60;
+    let tempOutCalc = (inputData.calculationMode === 'verify') ? (parseFloat(inputData.tempOut) || tempIn) : tempBath + (tempIn - tempBath) / 2; 
+    
+    let ho = 0, hi = 0, Uo = 0, reynolds = 0, nusselt = 0;
+
+    for (let i = 0; i < 50; i++) { 
+        const avgFluidTemp = (tempIn + tempOutCalc) / 2;
+        if (isNaN(avgFluidTemp)) break;
+        const fluidProps = getAmmoniaProps(avgFluidTemp);
+        
+        const velocity = (m_dot_hr / safeNumWounds / 3600 / fluidProps.rho) / pipe.area_ft;
+        reynolds = (fluidProps.rho * velocity * pipe_Di_ft) / fluidProps.mu_lb_ft_s;
+        
+        const nuExponent = isSubcooler ? 0.3 : 0.4;
+
+        if (reynolds < 2300) { nusselt = 3.66; } 
+        else if (reynolds >= 2300 && reynolds < 4000) { 
+            const nu_laminar = 3.66;
+            const nu_turbulent_start = 0.023 * Math.pow(4000, 0.8) * Math.pow(fluidProps.pr, nuExponent);
+            nusselt = nu_laminar + (reynolds - 2300) / (4000 - 2300) * (nu_turbulent_start - nu_laminar);
+        } else { 
+            nusselt = 0.023 * Math.pow(reynolds, 0.8) * Math.pow(fluidProps.pr, nuExponent);
+        }
+        
+        const wallFluidProps = getAmmoniaProps((avgFluidTemp + tempBath) / 2);
+        const viscosityRatio = wallFluidProps.mu_cP > 0 ? fluidProps.mu_cP / wallFluidProps.mu_cP : 1;
+        hi = (nusselt * fluidProps.k / pipe_Di_ft) * Math.pow(viscosityRatio, 0.14);
+
+        const Q = m_dot_hr * fluidProps.cp * Math.abs(tempIn - tempOutCalc);
+        const heatFlux = providedArea > 0 ? Q / providedArea : 0;
+        ho = calculateHo(heatFlux, operatingPressure);
+        
+        Uo = 1 / (1/ho + foulingOutside + (pipe_Do_ft * Math.log(pipe.od / pipe.id))/(2*pipeK) + (foulingInside * pipe_Do_ft)/pipe_Di_ft + pipe_Do_ft/(hi * pipe_Di_ft));
+        
+        if (inputData.calculationMode === 'verify') break; 
+
+        const C = m_dot_hr * fluidProps.cp;
+        if (C === 0) break; 
+        const epsilon = Math.exp(-(Uo * providedArea) / C);
+        const newTempOut = tempBath + (tempIn - tempBath) * epsilon;
+        
+        if (Math.abs(newTempOut - tempOutCalc) < 0.01) {
+            tempOutCalc = newTempOut;
+            break;
+        }
+        tempOutCalc = newTempOut;
+    }
+    
+    const finalCp = getAmmoniaProps((tempIn + tempOutCalc) / 2).cp;
+    const designDuty = m_dot_hr * finalCp * Math.abs(tempIn - tempOutCalc);
+    
+    const deltaT1 = Math.abs(tempIn - tempBath);
+    const deltaT2 = Math.abs(tempOutCalc - tempBath);
+    
+    let lmtd;
+    if (Math.abs(deltaT1 - deltaT2) < 0.1) { lmtd = deltaT1; } else { lmtd = (deltaT1 - deltaT2) / Math.log(deltaT1 / deltaT2); }
+
+    let requiredArea, areaMargin, areaCheck;
+    if (designDuty <= 0 || Uo <= 0 || lmtd <= 0) {
+        requiredArea = 0; areaMargin = 100; areaCheck = true;
+    } else {
+        requiredArea = designDuty / (Uo * lmtd);
+        areaMargin = ((providedArea - requiredArea) / requiredArea) * 100;
+        areaCheck = areaMargin >= 10;
+    }
+
+    const heatFlux = providedArea > 0 ? designDuty / providedArea : 0;
+    const avgFluidTemp = (tempIn + tempOutCalc) / 2;
+    const fluidProps = getAmmoniaProps(avgFluidTemp);
+    const velocity = ((massFlowTotal / safeNumWounds) / 60 / fluidProps.rho) / pipe.area_ft;
+    
+    let frictionFactor = 0;
+    if (reynolds > 0) {
+        const A = (2.457 * Math.log(1 / ((7 / reynolds)**0.9)))**16; const B = (37530 / reynolds)**16;
+        frictionFactor = 8 * ((8 / reynolds)**12 + 1 / (A + B)**1.5)**(1/12);
+    }
+    const dpStraight = (frictionFactor * (totalLengthPerPath / pipe_Di_ft) * fluidProps.rho * velocity**2) / (2 * 32.2 * 144);
+    const dpTotalPerPath = dpStraight * 1.2 + (1.5 * fluidProps.rho * velocity**2) / (2 * 32.2 * 144); 
+
+    const tempChangeTotal = Math.abs(tempIn - tempOutCalc);
+    const tempChangePerInch = coilHeight > 0 ? tempChangeTotal / coilHeight : 0;
+    const subcoolingLevels = [];
+    
+    if (tempChangeTotal > 0 && coilHeight > 0) {
+        const stepInches = Math.max(2, coilHeight / 10); 
+        let currentH = stepInches;
+        while (currentH <= coilHeight + 0.1) {
+            const achievedDT = currentH * tempChangePerInch;
+            const volume = Math.PI * ((vesselID / 12) / 2)**2 * (currentH / 12);
+            subcoolingLevels.push({ 
+                level: achievedDT, 
+                height: currentH, 
+                volume, 
+                valid: true 
+            });
+            currentH += stepInches;
+        }
+    }
+
+    const boilOffRate = designDuty > 0 ? designDuty / HFG_50F_NH3 : 0;
+    const boilOutLevels = [];
+    if (!isSubcooler && massFlowTotal > 0 && safeNumTurns > 1) {
+         const turnIncrements = new Set();
+         if (safeNumTurns <= 10) { for(let i=1; i<=safeNumTurns; i++) turnIncrements.add(i); }
+         else {
+             turnIncrements.add(1);
+             for(let i=0; i<10; i++) {
+                 const t = Math.round((safeNumTurns/10)*(i+1));
+                 if(t>0 && t<=safeNumTurns) turnIncrements.add(t);
+             }
+         }
+         const sortedTurns = [...turnIncrements].sort((a,b)=>a-b);
+         sortedTurns.forEach(t => {
+             const fraction = t / safeNumTurns;
+             const levelDuty = designDuty * fraction; 
+             const levelBoil = levelDuty / HFG_50F_NH3;
+             const h = (t > 1 ? (t - 1) * pitch : 0) + pipe.od;
+             boilOutLevels.push({ level: h, turns: t, dutyTR: levelDuty / 12000, boilOffRate: levelBoil });
+         });
+    }
+
+    const minTurns = requiredArea > 0 && providedArea > 0 ? Math.ceil(requiredArea / (providedArea/safeNumTurns)) : 0;
+    const normalLevel = (minTurns > 1 ? (minTurns - 1) * pitch : 0) + pipe.od;
+    const lowLowLevel = (minTurns - 1) * pitch + pipe.od;
+    const highHighLevel = coilHeight + 2;
+    
+    const isHeating = tempOutCalc > tempIn;
+    const modeMismatch = (isSubcooler && isHeating);
+
+    return {
+        tempOut: tempOutCalc, designDutyTR: designDuty / 12000, lmtd, requiredArea, providedArea, coilHeight, totalLengthPerPath, pitch, pitchValid,
+        velocity, reynolds, dpTotalPerPath, Uo, hi, ho, nusselt, heatFlux,
+        areaMargin, areaCheck,
+        velocityCheck: velocity >= 3 && velocity <= 12,
+        velocityWarning: velocity > 8 && velocity <= 12,
+        pressureDropCheck: dpTotalPerPath <= 15,
+        heatFluxCheck: heatFlux < HEAT_FLUX_WARNING_THRESHOLD,
+        tempChangeTotal, tempChangePerInch, lengthPerInch: coilHeight > 0 ? totalLengthPerPath / coilHeight : 0, subcoolingLevels,
+        minTurns, normalLevel, lowLowLevel, highHighLevel, boilOffRate, boilOutLevels,
+        deltaT1, deltaT2, modeMismatch, isHeating,
+        pipe // Return pipe for optimizer use
+    };
+}
+
+// --- UI Components ---
+const Tooltip = ({ text, children }) => (
+  <div className="relative flex items-center group">
+    {children}
+    <div className="absolute left-0 w-56 p-2 ml-8 text-sm text-white bg-gray-800 rounded-md shadow-lg opacity-0 group-hover:opacity-100 transition-opacity duration-300 z-10">{text}</div>
+  </div>
+);
+
+const InputField = ({ name, label, value, unit, type = "number", disabled = false, onChange, onBlur, onKeyDown }) => (
+    <div className="mb-3">
+        <label className="block text-sm text-gray-400 mb-1">{label} {unit && `(${unit})`}</label>
+        <input 
+            type={type} 
+            name={name} 
+            value={value} 
+            onChange={onChange} 
+            onBlur={onBlur} 
+            onKeyDown={onKeyDown} 
+            disabled={disabled} 
+            step="any"
+            className={`w-full bg-gray-700 border border-gray-600 rounded-md p-2 text-white focus:ring-2 focus:ring-cyan-500 focus:border-transparent transition-all ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
+        />
+    </div>
+);
+
+const CheckRow = ({ label, pass, warning = false, text = "" }) => {
+    if (pass === null) { 
+        return (
+            <div className="flex items-center justify-between p-2 rounded-lg bg-gray-700/50 opacity-60">
+                <span className="text-gray-400">{label}</span>
+                <div className="flex items-center text-gray-400"><span>N/A</span></div>
+            </div>
+        ); 
+    }
+    return (
+        <div className={`flex items-center justify-between p-2 rounded-lg ${warning ? 'bg-yellow-800/50' : 'bg-gray-700/50'}`}>
+            <span className="text-gray-300">{label}</span>
+            {warning ? (
+                <div className="flex items-center text-yellow-400">
+                    <AlertTriangle className="w-5 h-5 mr-2" /><span>{text}</span>
+                </div>
+            ) : pass ? (
+                <div className="flex items-center text-green-400">
+                    <CheckCircle className="w-5 h-5 mr-2" /><span>Pass</span>
+                </div>
+            ) : (
+                <div className="flex items-center text-red-400">
+                    <XCircle className="w-5 h-5 mr-2" /><span>Fail</span>
+                </div>
+            )}
+        </div>
+    );
+};
+
+const ResultRow = ({ label, value, unit, tooltip }) => {
+    let finalValue = "N/A";
+    if (typeof value === 'number' && isFinite(value)) {
+        if (value > 100000) finalValue = value.toExponential(2);
+        else if (Math.abs(value) < 0.001 && value !== 0) finalValue = value.toExponential(2);
+        else if (label.includes("No.") || label.includes("Factor") || label.includes("Ratio") || label.includes("Pitch")) finalValue = value.toFixed(3);
+        else if (label.includes("ΔP") || label.includes("Velocity")) finalValue = value.toFixed(2);
+        else if (label.includes("Turns") || label.includes("Length") || label.includes("HTC") || label.includes("Flux")) finalValue = Math.round(value).toLocaleString();
+        else finalValue = value.toFixed(1);
+    }
+    return (
+        <div className="flex justify-between items-center py-2 border-b border-gray-700">
+            <div className="flex items-center">
+                <span className="text-gray-300">{label}</span>
+                {tooltip && <Tooltip text={tooltip}><HelpCircle className="w-3 h-3 ml-1 text-gray-500" /></Tooltip>}
+            </div>
+            <span className="font-bold text-cyan-300">{finalValue} <span className="text-xs text-gray-400">{unit}</span></span>
+        </div>
+    );
+};
+
+// --- Main App Component ---
+export default function App() {
+    const initialValues = {
+        designMode: 'subcooler',
+        calculationMode: 'predict',
+        projectName: '',
+        massFlowTotal: '',
+        tempIn: '',
+        tempOut: '',
+        tempBath: '',
+        vesselID: '',
+        coilOD: '', 
+        pipeSize: '2in Sch 80', 
+        nominalPipeSize: '2in', 
+        pipeSchedule: 'Sch 80',
+        coilHeight: '', 
+        numWounds: '', 
+        numTurns: '', 
+        foulingInside: 0.0005, 
+        foulingOutside: 0.0005, 
+        pipeK: 26,
+    };
+
+    const [inputs, setInputs] = useState(initialValues);
+    const [calcInputs, setCalcInputs] = useState(initialValues);
+    const [results, setResults] = useState({});
+    const [optimization, setOptimization] = useState({ bestAlternative: null, message: '', running: false });
+    const [isGeneratingReport, setIsGeneratingReport] = useState(false);
+    const [inputMode, setInputMode] = useState('manual'); 
+    const [aiQuery, setAiQuery] = useState('');
+    const [isProcessing, setIsProcessing] = useState(false);
+    const [aiError, setAiError] = useState('');
+    const [diagnostics, setDiagnostics] = useState({ results: null, running: false });
+
+    useEffect(() => {
+        const combinedKey = `${inputs.nominalPipeSize} ${inputs.pipeSchedule}`;
+        if (PIPE_PROPS[combinedKey]) {
+            setInputs(prev => ({ ...prev, pipeSize: combinedKey }));
+            setCalcInputs(prev => ({ ...prev, pipeSize: combinedKey }));
+        }
+    }, [inputs.nominalPipeSize, inputs.pipeSchedule]);
+
+    const calculations = useMemo(() => {
+        return calculatePerformance(calcInputs);
+    }, [calcInputs]);
+
+    useEffect(() => {
+        setResults(calculations);
+    }, [calculations]);
+
+    useEffect(() => {
+        if (inputs.calculationMode === 'predict' && results.tempOut && isFinite(results.tempOut)) {
+            const calculatedTempStr = results.tempOut.toFixed(2);
+            if (inputs.tempOut !== calculatedTempStr) {
+                setInputs(prev => ({ ...prev, tempOut: calculatedTempStr }));
+            }
+        }
+    }, [results.tempOut, inputs.calculationMode]);
+    
+    const handleInputChange = (e) => {
+        const { name, value, type, tagName } = e.target;
+        setInputs(prev => ({ ...prev, [name]: type === 'radio' ? value : value }));
+        if (type === 'radio' || tagName === 'SELECT') {
+             setCalcInputs(prev => ({ ...prev, [name]: value }));
+             setOptimization({ bestAlternative: null, message: '', running: false });
+        } else {
+             setOptimization({ bestAlternative: null, message: '', running: false });
+        }
+    };
+
+    const handleBlur = () => {
+        setCalcInputs(inputs);
+    };
+
+    const handleKeyDown = (e) => {
+        if (e.key === 'Enter') {
+            handleBlur();
+        }
+    };
+
+    const runDiagnostics = async () => {
+        setDiagnostics({ results: null, running: true });
+        const apiKey = ""; 
+        const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${apiKey}`;
+        let results = [];
+        results.push({ name: 'API Key Check', status: 'info', message: 'Assuming execution environment injects an API key. A failed network test may indicate a key issue.' });
+        try {
+            const response = await fetch(apiUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ contents: [{ parts: [{ text: "This is a connectivity test" }] }] })
+            });
+            if (response.ok) {
+                results.push({ name: 'API Connectivity', status: 'success', message: `Successfully connected to the API endpoint (Status: ${response.status}).` });
+            } else {
+                 let errorMessage = `Connection failed. Status: ${response.status}.`;
+                 if (response.status === 403 || response.status === 401) { errorMessage += ' This commonly indicates an invalid, expired, or missing API key.'; } 
+                 else if (response.status === 400) { errorMessage += ' The request was malformed, which may be a code issue.'; } 
+                 else { errorMessage += ' Please check the browser console for more details on network or CSP errors.'; }
+                 results.push({ name: 'API Connectivity', status: 'error', message: errorMessage });
+            }
+        } catch (error) {
+            results.push({ name: 'Network Fetch', status: 'error', message: `Could not reach the API endpoint. Details: ${error.message}` });
+        }
+        setDiagnostics({ results: results, running: false });
+    };
+
+    const handleAiProcess = async () => {
+        setIsProcessing(true);
+        setAiError('');
+        setDiagnostics({ results: null, running: false });
+        const systemPrompt = `You are a data extraction tool. Your sole function is to parse user text and convert it into a JSON object based on the provided schema.`;
+        const responseSchema = {
+            type: "OBJECT",
+            properties: {
+                designMode: { type: "STRING" }, calculationMode: { type: "STRING" }, projectName: { type: "STRING" }, massFlowTotal: { type: "NUMBER" }, tempIn: { type: "NUMBER" },
+                tempOut: { type: "STRING" }, tempBath: { type: "NUMBER" }, coilOD: { type: "NUMBER" }, nominalPipeSize: { type: "STRING" }, pipeSchedule: { type: "STRING" },
+                coilHeight: { type: "NUMBER" }, numWounds: { type: "NUMBER" }, numTurns: { type: "NUMBER" }, vesselID: { type: "NUMBER" }, foulingInside: { type: "NUMBER" },
+                foulingOutside: { type: "NUMBER" }, pipeK: { type: "NUMBER" },
+            },
+        };
+        try {
+            const apiKey = ""; 
+            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${apiKey}`;
+            const payload = {
+                contents: [{ parts: [{ text: aiQuery }] }],
+                systemInstruction: { parts: [{ text: systemPrompt }] },
+                generationConfig: { responseMimeType: "application/json", responseSchema: responseSchema, },
+            };
+            const response = await fetchWithRetry(apiUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+            const result = await response.json();
+            if (result.candidates?.[0]?.finishReason === 'SAFETY') { throw new Error("The request was blocked by the AI's safety filters. Please rephrase your query."); }
+            let jsonText = result.candidates?.[0]?.content?.parts?.[0]?.text;
+            if (!jsonText) { throw new Error("No valid data received from AI. The model may not have been able to parse the request."); }
+            let cleanedJsonText = jsonText.trim();
+            if (cleanedJsonText.startsWith('```json')) { cleanedJsonText = cleanedJsonText.substring(7, cleanedJsonText.length - 3).trim(); } 
+            else if (cleanedJsonText.startsWith('```')) { cleanedJsonText = cleanedJsonText.substring(3, cleanedJsonText.length - 3).trim(); }
+            try {
+                const parsedJson = JSON.parse(cleanedJsonText);
+                const newInputs = { ...inputs, ...parsedJson };
+                setInputs(newInputs);
+                setCalcInputs(newInputs); 
+                setInputMode('manual');
+            } catch (e) {
+                const match = jsonText.match(/\{[\s\S]*\}/);
+                if (match && match[0]) {
+                    try {
+                        const parsedJsonFromRegex = JSON.parse(match[0]);
+                        const newInputs = { ...inputs, ...parsedJsonFromRegex };
+                        setInputs(newInputs);
+                        setCalcInputs(newInputs);
+                        setInputMode('manual');
+                    } catch (parseError) { throw new Error("AI returned malformed JSON that could not be repaired."); }
+                } else { throw new Error("AI response did not contain a valid JSON object."); }
+            }
+        } catch (error) {
+            console.error("AI processing error:", error);
+            let userMessage = `An unexpected error occurred: ${error.message}.`;
+            if (error.status) {
+                switch (error.status) {
+                    case 401: case 403: userMessage = "Authentication failed. API key issue."; break;
+                    case 429: userMessage = "Service temporarily unavailable."; break;
+                    case 500: case 503: userMessage = "AI service internal error."; break;
+                }
+            }
+            setAiError(userMessage);
+        } finally { setIsProcessing(false); }
+    };
+
+    const findBestAlternative = () => {
+        setOptimization({ running: true, bestAlternative: null, message: '' });
+        setTimeout(() => {
+            const currentPerf = calculatePerformance(inputs);
+            const { requiredArea, designDutyTR } = currentPerf;
+
+            if (!isFinite(requiredArea) || requiredArea <= 0) {
+                setOptimization({ running: false, bestAlternative: null, message: 'Cannot optimize. Please enter valid process data first.' });
+                return;
+            }
+
+            let bestOption = null;
+            const pipe = PIPE_PROPS[inputs.pipeSize];
+            if (!pipe) {
+                setOptimization({ running: false, bestAlternative: null, message: 'Invalid pipe size.' });
+                return;
+            }
+
+            const targetH = parseFloat(inputs.coilHeight) || 36.0;
+            const minH = targetH * 0.8; 
+            const maxH = targetH * 1.2; 
+
+            const pipe_Di_ft = pipe.id / 12;
+            const lengthPerTurn = (Math.PI * (parseFloat(inputs.coilOD) - pipe.od)) / 12;
+            
+            for (let w = 1; w <= 4; w++) {
+                for (let n = 5; n <= 60; n++) { 
+                    for (let p = pipe.od + 0.125; p <= 6.0; p += 0.25) { 
+                        const height = (n - 1) * p + pipe.od;
+
+                        if (height >= minH && height <= maxH) {
+                            const currentProvidedArea = w * n * lengthPerTurn * (Math.PI * pipe.od / 12);
+                            
+                            if (currentProvidedArea < (requiredArea * 1.1)) continue; 
+
+                            const m_dot_hr = parseFloat(inputs.massFlowTotal) * 60;
+                            const avgTemp = (parseFloat(inputs.tempIn) + currentPerf.tempOut) / 2;
+                            const fluidProps = getAmmoniaProps(avgTemp); 
+                            
+                            const velocity = (m_dot_hr / w / 3600 / fluidProps.rho) / pipe.area_ft;
+                            const reynolds = (fluidProps.rho * velocity * pipe_Di_ft) / fluidProps.mu_lb_ft_s;
+                            
+                            let frictionFactor = 0.02; 
+                            if (reynolds > 0) {
+                                const A = (2.457 * Math.log(1 / ((7 / reynolds)**0.9)))**16;
+                                const B = (37530 / reynolds)**16;
+                                frictionFactor = 8 * ((8 / reynolds)**12 + 1 / (A + B)**1.5)**(1/12);
+                            }
+                            const dpStraight = (frictionFactor * ((n * lengthPerTurn) / pipe_Di_ft) * fluidProps.rho * velocity**2) / (2 * 32.2 * 144);
+                            const dp = dpStraight * 1.2 + (1.5 * fluidProps.rho * velocity**2) / (2 * 32.2 * 144);
+                            
+                            if (velocity >= 3 && velocity <= 12 && dp <= 15) {
+                                if (!bestOption || dp < bestOption.dpTotalPerPath) {
+                                    bestOption = { numWounds: w, numTurns: n, pitch: p, coilHeight: height, dpTotalPerPath: dp, designDutyTR: designDutyTR };
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            if (!bestOption) {
+                setOptimization({ running: false, bestAlternative: null, message: `No viable alternatives found within +/- 20% of ${targetH}" height.` });
+            } else if (bestOption.dpTotalPerPath >= currentPerf.dpTotalPerPath && bestOption.numWounds === parseInt(inputs.numWounds, 10)) {
+                setOptimization({ running: false, bestAlternative: null, message: 'Current design is optimal and meets all constraints!' });
+            } else {
+                 let message = 'This alternative meets all design criteria with a lower pressure drop.';
+                setOptimization({ running: false, bestAlternative: bestOption, message });
+            }
+        }, 100);
+    };
+
+    const generateReport = () => {
+        const reportWindow = window.open('', '_blank');
+        if (!reportWindow) { alert("Please allow popups to view the report."); return; }
+        setIsGeneratingReport(true);
+        const formatVal = (value, precision = 1) => {
+            if (typeof value !== 'number' || !isFinite(value)) return "N/A";
+            if (value > 100000) return value.toExponential(2);
+            return value.toFixed(precision);
+        };
+        const avgTemp = (parseFloat(calcInputs.tempIn) + parseFloat(results.tempOut)) / 2;
+        const props = getAmmoniaProps(avgTemp);
+        const pipe = PIPE_PROPS[calcInputs.pipeSize];
+        
+        const renderStepHtml = (title, equation, value, note) => `
+            <div style="margin-bottom: 20px; border-bottom: 1px dashed #e5e7eb; padding-bottom: 15px;">
+                <div style="font-weight: bold; color: #1f2937; margin-bottom: 5px;">${title}</div>
+                <div style="font-family: 'Courier New', monospace; background: #f3f4f6; padding: 8px; border-radius: 4px; margin: 5px 0; font-size: 0.9em; color: #374151;">${equation}</div>
+                <div style="display: flex; justify-content: space-between; align-items: baseline; margin-top: 5px;">
+                    <div style="font-weight: bold; color: #0891b2;">Result: ${value}</div>
+                </div>
+                <div style="font-style: italic; font-size: 0.85em; color: #6b7280; margin-top: 4px;">${note}</div>
+            </div>
+        `;
+        const renderCheckHtml = (title, success, isWarning, passText, failText) => {
+            if (success === null) return '';
+            const color = success ? '#15803d' : (isWarning ? '#a16207' : '#b91c1c');
+            const icon = success ? '✔' : (isWarning ? '⚠' : '✖');
+            const status = success ? 'Pass' : (isWarning ? 'Warning' : 'Fail');
+            const text = success ? passText : failText;
+            return `<div style="margin-bottom: 15px; padding: 12px; border: 1px solid #e5e7eb; border-radius: 8px; background-color: #f9fafb;">
+                    <div style="font-weight: bold; color: ${color}; font-family: 'Carlito', sans-serif; display: flex; align-items: center;">
+                        <span style="margin-right: 8px; font-size: 1.2em;">${icon}</span> ${title}: ${status}
+                    </div>
+                    <div style="font-size: 0.9em; color: #4b5563; margin-top: 4px; margin-left: 24px;">${text}</div>
+                </div>`;
+        };
+        const renderDefinitionHtml = (term, definition) => `<div style="margin-bottom: 12px;"><span style="font-weight: bold; color: #1e40af; display: block;">${term}</span><span style="color: #4b5563; font-size: 0.9em;">${definition}</span></div>`;
+        const renderRowHtml = (label, value, unit) => `<tr><td style="padding: 8px; border-bottom: 1px solid #eee; color: #4b5563;">${label}</td><td style="padding: 8px; border-bottom: 1px solid #eee; font-weight: 600; text-align: right; color: #1f2937;">${value}</td><td style="padding: 8px; border-bottom: 1px solid #eee; color: #6b7280; width: 60px;">${unit}</td></tr>`;
+
+        let calculationContent = '';
+        const isSubcooler = calcInputs.designMode === 'subcooler';
+        
+        if (isSubcooler) {
+            calculationContent = `
+                 ${renderStepHtml("1. Geometric Parameters (Liquid Coil)", "L_turn = &pi; * (OD_coil - OD_pipe) / 12<br>Area_prov = N_wounds * N_turns * L_turn * (&pi; * OD_pipe / 12)", `${formatVal(results.providedArea)} ft²`, `Total surface area available to subcool the liquid.`)}
+                 ${renderStepHtml("2. Liquid Prop. at Average Bulk Temp", `T_avg = ${formatVal(avgTemp)}°F`, `&rho; = ${props.rho.toFixed(2)} lb/ft³<br>&mu; = ${props.mu_cP.toFixed(3)} cP<br>k = ${props.k.toFixed(3)} Btu/hr-ft-°F<br>Cp = ${props.cp.toFixed(3)} Btu/lb-°F`, `Properties taken at average liquid temperature.`)}
+                 ${renderStepHtml("3. Tube Side Velocity & Flow Regime", "Re = (&rho; * v * ID_pipe) / &mu;", `Velocity = ${formatVal(results.velocity, 2)} ft/s<br>Re = ${formatVal(results.reynolds, 0)}`, `Aim for Re > 4000 (Turbulent) for effective heat transfer.`)}
+                 ${renderStepHtml("4. Inside Heat Transfer Coeff. (h_i)", "Nu = 0.023 * Re^0.8 * Pr^0.3 (Dittus-Boelter)", `h_i = ${formatVal(results.hi, 1)} Btu/hr-ft²-°F`, `Convection coefficient for cooling fluid inside pipe.`)}
+                 ${renderStepHtml("5. Shell Side Boiling Coeff. (h_o)", "h_o = 0.0055 * Pc^0.69 * q^0.7 * F_p (Mostinski)", `h_o = ${formatVal(results.ho, 1)} Btu/hr-ft²-°F`, `Nucleate pool boiling of ammonia on the outside.`)}
+                 ${renderStepHtml("6. Overall U-Value", "1/U_o = 1/h_o + R_fo + R_wall + R_fi + (Do/Di)*(1/h_i)", `U_o = ${formatVal(results.Uo, 1)} Btu/hr-ft²-°F`, `Overall heat transfer coefficient including fouling.`)}
+                 ${renderStepHtml("7. Thermal Performance", "Q = m_dot * Cp * (T_in - T_out)<br>LMTD = (&Delta;T1 - &Delta;T2) / ln(&Delta;T1 / &Delta;T2)", `Duty = ${formatVal(results.designDutyTR)} TR<br>LMTD = ${formatVal(results.lmtd)}°F<br>&Delta;T_in = ${formatVal(results.deltaT1)}°F, &Delta;T_out = ${formatVal(results.deltaT2)}°F`, `Sensible heat removed from liquid.`)}
+            `;
+        } else {
+            calculationContent = `
+                 ${renderStepHtml("1. Geometric Parameters (Boil-out Coil)", "Area_prov = N_wounds * N_turns * L_turn * (&pi; * OD_pipe / 12)", `${formatVal(results.providedArea)} ft²`, `Total surface area available.`)}
+                 ${renderStepHtml("2. Heating Medium Properties", `T_avg = ${formatVal(avgTemp)}°F`, `&rho; = ${props.rho.toFixed(2)} lb/ft³<br>Cp = ${props.cp.toFixed(3)} Btu/lb-°F`, `Properties of hot fluid providing energy.`)}
+                 ${renderStepHtml("3. Tube Side Velocity", "v = (massFlow / N_wounds) / (&rho; * Area_flow_pipe * 60)", `Velocity = ${formatVal(results.velocity, 2)} ft/s`, `Check against erosion limits.`)}
+                 ${renderStepHtml("4. Inside Heat Transfer Coeff. (h_i)", "Nu = 0.023 * Re^0.8 * Pr^0.4 (Dittus-Boelter)", `h_i = ${formatVal(results.hi, 1)} Btu/hr-ft²-°F`, `Convection coefficient for heating fluid (n=0.4).`)}
+                 ${renderStepHtml("5. Shell Side Boiling Coeff. (h_o)", "h_o = 0.0055 * Pc^0.69 * q^0.7 * F_p (Mostinski)", `h_o = ${formatVal(results.ho, 1)} Btu/hr-ft²-°F`, `Pool boiling coefficient.`)}
+                 ${renderStepHtml("6. Overall Heat Transfer (U_o)", "1/U_o = 1/h_o + R_fo + R_wall + R_fi + (Do/Di)*(1/h_i)", `U_o = ${formatVal(results.Uo, 1)} Btu/hr-ft²-°F`, `Overall heat transfer coefficient.`)}
+                 ${renderStepHtml("7. Boil-off Performance", "Boil-off Rate = Q_total / h_fg", `Duty = ${formatVal(results.designDutyTR)} TR<br>Boil-off Rate = ${formatVal(results.boilOffRate, 0)} lb/hr`, `Mass of ammonia generated per hour.`)}
+            `;
+        }
+
+        const reportHtml = `<html><head><title>Coil Design Report</title><style>body{font-family:'Georgia',serif;padding:40px;max-width:850px;margin:0 auto;color:#333}h1,h2,h3{font-family:'Carlito',sans-serif;color:#1f2937}table{width:100%;border-collapse:collapse;margin-bottom:20px}td{vertical-align:top}.header{text-align:center;border-bottom:4px solid #374151;padding-bottom:20px;margin-bottom:30px}.section-title{font-size:1.2em;font-weight:bold;color:#1e40af;border-bottom:2px solid #1e40af;margin-top:30px;margin-bottom:15px;padding-bottom:5px;font-family:'Carlito',sans-serif}.footer{margin-top:50px;padding-top:20px;border-top:1px solid #eee;text-align:right;font-size:0.9em;color:#666}.warning-box{background:#fef2f2;border:1px solid #ef4444;color:#b91c1c;padding:10px;border-radius:5px;margin-bottom:15px;font-weight:bold}@media print{body{padding:0;margin:0.5in}.no-print{display:none}button{display:none}.page-break{page-break-before:always}.avoid-break{page-break-inside:avoid}}</style><link href="https://fonts.googleapis.com/css2?family=Carlito:wght@400;700&display=swap" rel="stylesheet"></head><body><div style="text-align:right;margin-bottom:20px" class="no-print"><button onclick="window.print()" style="padding:10px 20px;background:#0891b2;color:white;border:none;border-radius:5px;cursor:pointer;font-weight:bold">Print Report</button></div><div class="header"><h1 style="margin-bottom:5px">Coil Design Calculation Report</h1><h2 style="margin-top:0;color:#4b5563">${calcInputs.designMode==='subcooler'?'Subcooler Coil Design':'Boil-out Coil Design'}</h2><p style="font-size:1.2em;margin:5px 0">${calcInputs.projectName||'Untitled Project'}</p><p style="font-size:0.9em;color:#9ca3af">Report Date: ${new Date().toLocaleDateString()}</p></div><div class="section"><div style="background:#f3f4f6;padding:10px 15px;border-radius:8px;margin-bottom:20px;font-family:'Carlito',sans-serif;font-weight:bold;font-size:1.3em;color:#374151;text-align:center">Design Checks & Summary</div>${results.modeMismatch ? `<div class="warning-box">CRITICAL WARNING: Temperature inputs indicate HEATING, but Design Mode is SUBCOOLER. Please check inputs.</div>` : ''}${!results.pitchValid ? `<div class="warning-box">CRITICAL WARNING: Pitch (${formatVal(results.pitch, 2)} in) is less than Pipe OD. Coil is not physically buildable. Increase Height or reduce Turns.</div>` : ''}${renderCheckHtml("Area Sufficient (+10%)",results.areaCheck,false,`The provided coil area of ${formatVal(results.providedArea)} ft² exceeds the required area of ${formatVal(results.requiredArea)} ft² by more than 10%.`,`The provided coil area of ${formatVal(results.providedArea)} ft² is less than 1.1x the required area.`)}${renderCheckHtml("Velocity OK",results.velocityCheck,results.velocityWarning,`Velocity of ${formatVal(results.velocity,2)} ft/s is within recommended 3-12 ft/s.`,`Velocity of ${formatVal(results.velocity,2)} ft/s is outside 3-12 ft/s range.`)}${renderCheckHtml("Pressure Drop OK",results.pressureDropCheck,false,`Pressure drop ${formatVal(results.dpTotalPerPath,2)} psi is below 15 psi limit.`,`Pressure drop ${formatVal(results.dpTotalPerPath,2)} psi exceeds 15 psi limit.`)}${renderCheckHtml("Heat Flux OK",results.heatFluxCheck,!results.heatFluxCheck,`Heat flux ${formatVal(results.heatFlux,0)} Btu/hr-ft² is acceptable.`,`Heat flux ${formatVal(results.heatFlux,0)} Btu/hr-ft² is high (potential film boiling).`)}</div><div style="display:flex;gap:40px;margin-top:30px"><div style="flex:1"><div class="section-title">User Inputs</div><table>${renderRowHtml("Design Mode",calcInputs.designMode,"")}${renderRowHtml("Total Mass Flow",calcInputs.massFlowTotal,"lb/min")}${renderRowHtml(calcInputs.designMode==='subcooler'?"Inlet Temp":"Hot Fluid Inlet Temp",calcInputs.tempIn,"°F")}${renderRowHtml("Vessel Bath Temp",calcInputs.tempBath,"°F")}${renderRowHtml("Pipe Size",calcInputs.pipeSize,"")}${renderRowHtml("Coil OD",calcInputs.coilOD,"in")}${renderRowHtml("Number of Wounds",calcInputs.numWounds,"")}${renderRowHtml("Turns per Wound",calcInputs.numTurns,"")}${renderRowHtml("Coil Height",calcInputs.coilHeight,"in")}${renderRowHtml("Inside Fouling R_fi",calcInputs.foulingInside,"hr-ft²-°F/Btu")}${renderRowHtml("Outside Fouling R_fo",calcInputs.foulingOutside,"hr-ft²-°F/Btu")}</table></div><div style="flex:1"><div class="section-title">Calculated Results</div><table>${renderRowHtml("Design Duty",formatVal(results.designDutyTR),"TR")}${renderRowHtml(calcInputs.designMode==='subcooler'?"Outlet Temp":"Hot Fluid Outlet Temp",calcInputs.calculationMode==='verify'?calcInputs.tempOut:formatVal(results.tempOut),calcInputs.calculationMode==='verify'?"°F (In)":"°F (Calc)")}${renderRowHtml("LMTD (Corrected)",formatVal(results.lmtd),"°F")}${renderRowHtml("Required Area",formatVal(results.requiredArea),"ft²")}${renderRowHtml("Provided Area",formatVal(results.providedArea),"ft²")}${renderRowHtml("Area Margin",formatVal(results.areaMargin),"%")}${renderRowHtml("Heat Flux",formatVal(results.heatFlux,0),"Btu/hr-ft²")}</table><div class="section-title">Hydraulics</div><table>${renderRowHtml("Velocity",formatVal(results.velocity,2),"ft/s")}${renderRowHtml("Pressure Drop",formatVal(results.dpTotalPerPath,2),"psi")}</table>${calcInputs.designMode==='subcooler'?`<div class="section-title">Subcooling Analysis</div><div style="margin-bottom:5px;font-weight:bold;color:#0891b2">Subcooling Achieved: ${results.modeMismatch ? '0 (Heating)' : formatVal(results.tempChangeTotal)} °F</div><table style="font-size:0.9em"><tr style="background:#f9fafb;font-weight:bold"><td>Target ΔT</td><td style="text-align:right">Height</td><td style="text-align:right">Vol</td></tr>${results.subcoolingLevels&&results.subcoolingLevels.length>0?results.subcoolingLevels.map(l=>`<tr><td>${formatVal(l.level)}°F</td><td style="text-align:right">${formatVal(l.height)} in</td><td style="text-align:right">${formatVal(l.volume)} ft³</td></tr>`).join(''):''}</table>`:`<div class="section-title">Boil-out Performance</div><table style="font-size:0.9em"><tr style="background:#f9fafb;font-weight:bold"><td>Level</td><td style="text-align:right">Duty</td><td style="text-align:right">Boil-off</td></tr>${results.boilOutLevels?results.boilOutLevels.map(l=>`<tr><td>${formatVal(l.level)} in</td><td style="text-align:right">${formatVal(l.dutyTR)} TR</td><td style="text-align:right">${formatVal(l.boilOffRate,0)}</td></tr>`).join(''):''}</table>`}</div></div><div class="page-break"></div><div class="section-title" style="text-align:center;margin-bottom:30px">Detailed Design Calculations</div><div class="calculation-steps">${calculationContent}</div><div class="avoid-break" style="margin-top:40px;background-color:#f8fafc;padding:20px;border-radius:8px;border:1px solid #e2e8f0"><div class="section-title" style="margin-top:0;text-align:center;border-bottom:0">References & Standards</div>${renderDefinitionHtml("ASHRAE Handbook - Fundamentals","Thermophysical properties of Anhydrous Ammonia (R-717).")}${renderDefinitionHtml("IIAR 2","Standard for Safe Design of Closed-Circuit Ammonia Refrigeration Systems.")}${renderDefinitionHtml("Heat Transfer Correlations","Tube-side convection: Gnielinski/Dittus-Boelter (Turbulent, n=0.3/0.4). Shell-side boiling: Mostinski correlation.")}${renderDefinitionHtml("TEMA Standards","Guidelines for fouling factors and heat exchanger mechanical design.")}</div><div style="margin-top:20px;font-size:0.85em;color:#666;font-style:italic;border-top:1px solid #eee;padding-top:10px;">Note: This coil design report addresses only thermal and hydraulic performance. Vessel design, code compliance (ASME Sec VIII, B31.5), relief valve sizing, P&IDs, and operating procedures are out of scope and must be handled in separate project documents.</div><div class="footer"><p style="font-weight:bold;color:#1f2937;margin:0">Eli Wright</p><p style="margin:2px 0">Engineering Manager</p><p style="margin:2px 0">Joe White Tank Company, Inc.</p></div><script>window.onload=function(){setTimeout(()=>window.print(),500)}</script></body></html>`;
+        
+        reportWindow.document.open();
+        reportWindow.document.write(reportHtml);
+        reportWindow.document.close();
+        setIsGeneratingReport(false);
+    };
+
+    const renderInput = (name, label, unit, type = "number", disabled = false) => (
+        <InputField 
+            key={name}
+            name={name} 
+            label={label} 
+            value={inputs[name]} 
+            unit={unit} 
+            type={type} 
+            disabled={disabled} 
+            onChange={handleInputChange} 
+            onBlur={handleBlur} 
+            onKeyDown={handleKeyDown} 
+        />
+    );
+
+    return (
+        <>
+            <div className="min-h-screen bg-gray-900 text-white font-sans p-4 sm:p-6 lg:p-8">
+                <div className="max-w-7xl mx-auto">
+                    <header className="text-center mb-8">
+                        <h1 className="text-4xl font-bold text-cyan-400 tracking-tight">Advanced Spiral Coil Calculator</h1>
+                        <p className="text-gray-400 mt-2">Design and verify subcooler or boil-out coils with dynamic calculations.</p>
+                    </header>
+                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                        <div className="lg:col-span-1 space-y-6">
+                            <div className="bg-gray-800 p-6 rounded-xl shadow-lg">
+                                <h2 className="text-2xl font-semibold text-white mb-4 border-b border-cyan-500 pb-2">Inputs</h2>
+                                
+                                <div>
+                                    <h3 className="text-lg font-medium text-cyan-400 mb-2">Input Mode</h3>
+                                    <div className="flex gap-2 p-1 bg-gray-900 rounded-lg">
+                                        <button onClick={() => setInputMode('manual')} className={`flex-1 p-2 text-center rounded-md transition-all text-sm font-semibold flex items-center justify-center gap-2 ${inputMode === 'manual' ? 'bg-cyan-600 text-white' : 'bg-gray-700 hover:bg-gray-600'}`}><Edit className="w-4 h-4"/>Manual Entry</button>
+                                        <button onClick={() => setInputMode('ai')} className={`flex-1 p-2 text-center rounded-md transition-all text-sm font-semibold flex items-center justify-center gap-2 ${inputMode === 'ai' ? 'bg-cyan-600 text-white' : 'bg-gray-700 hover:bg-gray-600'}`}><Bot className="w-4 h-4"/>Describe with AI</button>
+                                    </div>
+                                </div>
+
+                                {inputMode === 'ai' ? (
+                                    <div className="space-y-4">
+                                        <textarea 
+                                            value={aiQuery}
+                                            onChange={(e) => setAiQuery(e.target.value)}
+                                            placeholder="e.g., '+50°F Control Pressure Receiver - 60 OD Vertical. Needs a subcooler for 345 lbs./min of refrigerant from +95F to +60F.'"
+                                            className="w-full h-48 bg-gray-700 border border-gray-600 rounded-md p-2 mt-1 focus:ring-cyan-500 focus:border-cyan-500"
+                                        />
+                                        <button onClick={handleAiProcess} disabled={isProcessing || !aiQuery} className="w-full flex items-center justify-center gap-2 bg-cyan-600 hover:bg-cyan-700 text-white font-bold py-2 px-4 rounded-md transition disabled:bg-gray-500">
+                                            {isProcessing ? 'Processing...' : 'Generate Inputs'}
+                                        </button>
+                                        {aiError && <p className="text-sm text-red-400 p-3 bg-red-800/20 rounded-md">{aiError}</p>}
+                                        <div className="mt-4 border-t border-gray-700 pt-4">
+                                            <h4 className="text-md font-semibold text-cyan-400 mb-2">Troubleshooting</h4>
+                                            <p className="text-xs text-gray-400 mb-2">If the feature fails, run this test to check the connection to the AI service.</p>
+                                            <button onClick={runDiagnostics} disabled={diagnostics.running} className="w-full text-sm bg-gray-700 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded-md transition disabled:bg-gray-500">
+                                                {diagnostics.running ? 'Running Diagnostics...' : 'Run Connection Test'}
+                                            </button>
+                                            {diagnostics.results && (
+                                                <div className="mt-2 space-y-1 text-xs">
+                                                    {diagnostics.results.map((result, index) => (
+                                                        <div key={index} className={`p-2 rounded flex items-start gap-2 ${result.status === 'success' ? 'bg-green-800/50 text-green-300' : result.status === 'error' ? 'bg-red-800/50 text-red-300' : 'bg-blue-800/50 text-blue-300'}`}>
+                                                           {result.status === 'success' ? <CheckCircle className="w-4 h-4 mt-0.5 flex-shrink-0"/> : result.status === 'error' ? <XCircle className="w-4 h-4 mt-0.5 flex-shrink-0"/> : <HelpCircle className="w-4 h-4 mt-0.5 flex-shrink-0"/>}
+                                                            <span><span className="font-bold">{result.name}:</span> {result.message}</span>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                ) : (
+                                <div className="space-y-4">
+                                    <div>
+                                        <h3 className="text-lg font-medium text-cyan-400 mb-2 flex items-center"><RefreshCw className="w-5 h-5 mr-2"/>Design Mode</h3>
+                                        <div className="flex gap-2 p-1 bg-gray-900 rounded-lg">
+                                            <button onClick={() => {
+                                                const newInputs = { ...inputs, designMode: 'subcooler' };
+                                                setInputs(newInputs);
+                                                setCalcInputs(newInputs);
+                                            }} className={`flex-1 p-2 text-center rounded-md transition-all text-sm font-semibold ${inputs.designMode === 'subcooler' ? 'bg-cyan-600 text-white' : 'bg-gray-700 hover:bg-gray-600'}`}>Subcooler Coil</button>
+                                            <button onClick={() => {
+                                                const newInputs = { ...inputs, designMode: 'boil-out' };
+                                                setInputs(newInputs);
+                                                setCalcInputs(newInputs);
+                                            }} className={`flex-1 p-2 text-center rounded-md transition-all text-sm font-semibold ${inputs.designMode === 'boil-out' ? 'bg-cyan-600 text-white' : 'bg-gray-700 hover:bg-gray-600'}`}>Boil-out Coil</button>
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <h3 className="text-lg font-medium text-cyan-400 mb-2">Calculation Mode</h3>
+                                        <div className="flex gap-4">
+                                            <label className={`flex-1 p-3 text-center rounded-md cursor-pointer transition-all ${inputs.calculationMode === 'verify' ? 'bg-cyan-600 text-white' : 'bg-gray-700 hover:bg-gray-600'}`}><input type="radio" name="calculationMode" value="verify" checked={inputs.calculationMode === 'verify'} onChange={handleInputChange} className="sr-only"/>Verify Design</label>
+                                            <label className={`flex-1 p-3 text-center rounded-md cursor-pointer transition-all ${inputs.calculationMode === 'predict' ? 'bg-cyan-600 text-white' : 'bg-gray-700 hover:bg-gray-600'}`}><input type="radio" name="calculationMode" value="predict" checked={inputs.calculationMode === 'predict'} onChange={handleInputChange} className="sr-only"/>Predict Temp</label>
+                                        </div>
+                                    </div>
+                                    <div><h3 className="text-lg font-medium text-cyan-400 mb-2">Project & Vessel</h3>
+                                        <div className="space-y-3">
+                                            {renderInput("projectName", "Project Name", "", "text")}
+                                            {renderInput("vesselID", "Vessel ID", "in")}
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <h3 className="text-lg font-medium text-cyan-400 mb-2">Process Conditions</h3>
+                                        <div className="space-y-3">
+                                            {renderInput("massFlowTotal", "Total Mass Flow", "lb/min")}
+                                            {renderInput("tempIn", inputs.designMode === 'subcooler' ? "Inlet Temp" : "Hot Fluid Inlet Temp", "°F")}
+                                            {renderInput("tempOut", inputs.designMode === 'subcooler' ? "Outlet Temp" : "Hot Fluid Outlet Temp", "°F", "number", inputs.calculationMode === 'predict')}
+                                            {renderInput("tempBath", "Vessel Bath Temp", "°F")}
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <h3 className="text-lg font-medium text-cyan-400 mb-2">Coil Geometry</h3>
+                                        <div className="grid grid-cols-2 gap-3">
+                                            <div><label className="text-sm text-gray-400">Pipe Size</label><select name="nominalPipeSize" value={inputs.nominalPipeSize} onChange={handleInputChange} className="w-full bg-gray-700 border border-gray-600 rounded-md p-2 mt-1"><option>1.5in</option><option>2in</option><option>2.5in</option></select></div>
+                                            <div><label className="text-sm text-gray-400">Schedule</label><select name="pipeSchedule" value={inputs.pipeSchedule} onChange={handleInputChange} className="w-full bg-gray-700 border border-gray-600 rounded-md p-2 mt-1"><option>Sch 40</option><option>Sch 80</option></select></div>
+                                        </div>
+                                        <div className="space-y-3 mt-3">
+                                            {renderInput("coilOD", "Coil Envelope OD", "in")}
+                                            {renderInput("numWounds", "Number of Wounds", "")}
+                                            {renderInput("numTurns", "Turns per Wound", "")}
+                                            {renderInput("coilHeight", "Coil Height", "in")}
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <h3 className="text-lg font-medium text-cyan-400 mb-2">Heat Transfer Parameters</h3>
+                                        <div className="space-y-3">
+                                            {renderInput("foulingInside", "Inside Fouling (Rffi)", "hr-ft²-°F/Btu")}
+                                            {renderInput("foulingOutside", "Outside Fouling (Rffo)", "hr-ft²-°F/Btu")}
+                                            {renderInput("pipeK", "Pipe Conductivity (k)", "Btu/hr-ft-°F")}
+                                        </div>
+                                    </div>
+                                </div>
+                                )}
+                            </div>
+                        </div>
+                        <div className="lg:col-span-2 space-y-6">
+                            <div className="bg-gray-800 p-6 rounded-xl shadow-lg">
+                                <div className="flex justify-between items-center mb-4 border-b border-cyan-500 pb-2">
+                                    <h2 className="text-2xl font-semibold text-white">Design Summary & Checks</h2>
+                                    <button onClick={generateReport} className="flex items-center bg-cyan-600 hover:bg-cyan-700 text-white font-bold py-2 px-4 rounded-md transition disabled:bg-gray-500"><FileDown className="w-5 h-5 mr-2"/>{isGeneratingReport ? 'Opening...' : 'Generate Report'}</button>
+                                </div>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6 text-center">
+                                    {results.modeMismatch && (
+                                        <div className="col-span-2 bg-red-900/50 border border-red-500 text-red-200 p-3 rounded-lg flex items-center justify-center font-bold">
+                                            <ShieldAlert className="w-6 h-6 mr-2"/> CRITICAL: Temp Logic Mismatch (Heating in Subcooler Mode)
+                                        </div>
+                                    )}
+                                    {!results.pitchValid && (
+                                        <div className="col-span-2 bg-yellow-900/50 border border-yellow-500 text-yellow-200 p-3 rounded-lg flex items-center justify-center font-bold">
+                                            <AlertTriangle className="w-6 h-6 mr-2"/> Warning: Coil Pitch ({results.pitch?.toFixed(2)} in) is less than Pipe OD.
+                                        </div>
+                                    )}
+                                    <CheckRow label="Area Sufficient (+10%)" pass={results.areaCheck} text={results.areaCheck ? "Pass" : "Fail"} warning={false} />
+                                    <CheckRow label="Velocity OK" pass={results.velocityCheck} text={results.velocityCheck ? "Pass" : "Warning"} warning={results.velocityWarning} />
+                                    <CheckRow label="Pressure Drop OK" pass={results.pressureDropCheck} text={results.pressureDropCheck ? "Pass" : "Fail"} warning={false} />
+                                    <CheckRow label="Heat Flux OK" pass={results.heatFluxCheck} text={results.heatFluxCheck ? "Pass" : "High Flux"} warning={!results.heatFluxCheck} />
+                                </div>
+                                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
+                                    <ResultRow label="Calc. U-Value" value={results.Uo} unit="Btu/hr-ft²-°F" />
+                                    <ResultRow 
+                                        label={inputs.designMode === 'subcooler' ? "Subcooling ΔT" : "Design Duty"} 
+                                        value={inputs.designMode === 'subcooler' ? (results.isHeating ? undefined : results.tempChangeTotal) : results.designDutyTR} 
+                                        unit={inputs.designMode === 'subcooler' ? "°F" : "TR"}
+                                        tooltip={inputs.designMode === 'subcooler' ? "Defined here as T_in − T_out" : null}
+                                    />
+                                    <ResultRow label="Velocity" value={results.velocity} unit="ft/s" />
+                                    <ResultRow label="ΔP / Path" value={results.dpTotalPerPath} unit="psi" />
+                                </div>
+                            </div>
+                             
+                            <div className="bg-gray-800 p-6 rounded-xl shadow-lg">
+                                <h2 className="text-2xl font-semibold text-white mb-4 border-b border-cyan-500 pb-2 flex items-center"><Sparkles className="w-6 h-6 mr-2 text-yellow-400"/>Design Optimization</h2>
+                                <p className="text-gray-400 mb-4">Find the best alternative design by varying wounds, turns, and pitch to achieve a coil height between 30" and 36".</p>
+                                <button onClick={findBestAlternative} disabled={optimization.running} className="w-full bg-cyan-600 hover:bg-cyan-700 text-white font-bold py-2 px-4 rounded-md transition duration-300 disabled:bg-gray-500">
+                                    {optimization.running ? 'Searching...' : 'Find Best Alternative'}
+                                </button>
+                                {optimization.bestAlternative && (
+                                    <div className="mt-6">
+                                        <h3 className="text-lg font-semibold text-cyan-400 mb-2">Better Alternative Found!</h3>
+                                        {optimization.message && <p className="text-sm text-gray-300 mb-3 p-3 bg-gray-900/50 rounded-md">{optimization.message}</p>}
+                                        <div className="p-4 rounded-lg bg-gray-700/50">
+                                            <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
+                                                <div><p className="text-sm text-gray-400">Wounds</p><p className="font-bold text-lg">{optimization.bestAlternative.numWounds}</p></div>
+                                                <div><p className="text-sm text-gray-400">Turns (N)</p><p className="font-bold text-lg">{optimization.bestAlternative.numTurns}</p></div>
+                                                <div><p className="text-sm text-gray-400">Pitch</p><p className="font-bold text-lg">{optimization.bestAlternative.pitch.toFixed(2)} in</p></div>
+                                                <div><p className="text-sm text-gray-400">Height</p><p className="font-bold text-lg">{optimization.bestAlternative.coilHeight.toFixed(2)} in</p></div>
+                                                <div><p className="text-sm text-gray-400">Pressure Drop</p><p className="font-bold text-lg text-green-400">{optimization.bestAlternative.dpTotalPerPath.toFixed(2)} psi</p></div>
+                                                <div><p className="text-sm text-gray-400">Duty</p><p className="font-bold text-lg">{optimization.bestAlternative.designDutyTR.toFixed(1)} TR</p></div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+                                {optimization.message && !optimization.bestAlternative && (
+                                    <div className="mt-6 p-4 rounded-lg bg-gray-700/50 text-center">
+                                        <p className="font-semibold text-cyan-400">{optimization.message}</p>
+                                    </div>
+                                )}
+                            </div>
+                            
+                            {inputs.designMode === 'subcooler' && (
+                                <div className="bg-gray-800 p-6 rounded-xl shadow-lg">
+                                    <h3 className="text-lg font-semibold text-cyan-400 mb-3 flex items-center"><BarChartHorizontal className="w-5 h-5 mr-2"/>Subcooling Performance Analysis</h3>
+                                    <p className="text-gray-400 mb-4 text-sm">Estimates the required liquid level (coil height) and corresponding shell volume to achieve a target subcooling ΔT.</p>
+                                    <div className="grid grid-cols-3 gap-x-4 text-center font-semibold border-b border-gray-600 pb-2 mb-2">
+                                        <span>Target ΔT</span><span>Req. Height</span><span>Shell Volume</span>
+                                    </div>
+                                    {results.subcoolingLevels?.length > 0 ? results.subcoolingLevels.map(item => (
+                                        <div key={item.level} className={`grid grid-cols-3 gap-x-4 text-center py-1.5 rounded ${!item.valid ? 'opacity-40' : ''}`}>
+                                            <span className="text-cyan-300">{item.level.toFixed(1)} °F</span>
+                                            <span>{item.height.toFixed(1)} in</span>
+                                            <span className="text-gray-400">{item.volume.toFixed(1)} ft³</span>
+                                        </div>
+                                    )) : <p className="text-center text-gray-500 py-4">Insufficient data for analysis.</p>}
+                                </div>
+                            )}
+                             {inputs.designMode === 'boil-out' && (
+                                <div className="bg-gray-800 p-6 rounded-xl shadow-lg">
+                                    <h3 className="text-lg font-semibold text-cyan-400 mb-3 flex items-center"><BarChartHorizontal className="w-5 h-5 mr-2"/>Boil-out Performance Analysis</h3>
+                                    <p className="text-gray-400 mb-4 text-sm">Shows the heat duty and boil-off rate at different liquid levels within the vessel.</p>
+                                    <div className="grid grid-cols-4 gap-x-4 text-center font-semibold border-b border-gray-600 pb-2 mb-2">
+                                        <span>Liquid Level</span><span>Submerged Turns</span><span>Heat Duty</span><span>Boil-off Rate</span>
+                                    </div>
+                                    {results.boilOutLevels?.length > 0 ? results.boilOutLevels.map(item => (
+                                        <div key={item.level} className={`grid grid-cols-4 gap-x-4 text-center py-1.5 rounded`}>
+                                            <span className="text-cyan-300">{item.level.toFixed(1)} in</span>
+                                            <span>{item.turns}</span>
+                                            <span>{item.dutyTR.toFixed(1)} TR</span>
+                                            <span className="text-gray-400">{Math.round(item.boilOffRate).toLocaleString()} lb/hr</span>
+                                        </div>
+                                    )) : <p className="text-center text-gray-500 py-4">Insufficient data for analysis.</p>}
+                                </div>
+                            )}
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                <div className="bg-gray-800 p-6 rounded-xl shadow-lg">
+                                    <h3 className="text-lg font-semibold text-cyan-400 mb-3 flex items-center"><Thermometer className="w-5 h-5 mr-2"/>Thermal & Area</h3>
+                                    <ResultRow label="Design Duty" value={results.designDutyTR} unit="TR" />
+                                    <ResultRow label="LMTD" value={results.lmtd} unit="°F" />
+                                    <ResultRow label="Required Area" value={results.requiredArea} unit="ft²" />
+                                    <ResultRow label="Provided Area" value={results.providedArea} unit="ft²" />
+                                    <ResultRow label="Area Margin" value={results.areaMargin} unit="%" />
+                                    <ResultRow label="Calculated Pitch" value={results.pitch} unit="in" />
+                                    <ResultRow label="Heat Flux" value={results.heatFlux} unit="Btu/hr-ft²" />
+                                </div>
+                                <div className="bg-gray-800 p-6 rounded-xl shadow-lg">
+                                    <h3 className="text-lg font-semibold text-cyan-400 mb-3 flex items-center"><Layers className="w-5 h-5 mr-2"/>Heat Transfer Details</h3>
+                                    <ResultRow label="Reynolds No." value={results.reynolds} unit="" />
+                                    {inputs.designMode === 'subcooler' && <ResultRow label="Nusselt No." value={results.nusselt} unit="" />}
+                                    <ResultRow label="Inside HTC (hᵢ)" value={results.hi} unit="Btu/hr-ft²-°F" />
+                                    <ResultRow label="Outside HTC (hₒ)" value={results.ho} unit="Btu/hr-ft²-°F" tooltip="Calculated based on pool boiling correlation" />
+                                    <ResultRow label="Overall HTC (Uₒ)" value={results.Uo} unit="Btu/hr-ft²-°F" />
+                                </div>
+                                <div className="bg-gray-800 p-6 rounded-xl shadow-lg">
+                                    <h3 className="text-lg font-semibold text-cyan-400 mb-3 flex items-center"><Wind className="w-5 h-5 mr-2"/>Hydraulics (per path)</h3>
+                                    <ResultRow label="Velocity" value={results.velocity} unit="ft/s" />
+                                    <ResultRow label="Total ΔP" value={results.dpTotalPerPath} unit="psi" />
+                                    <ResultRow label="Length per Path" value={results.totalLengthPerPath} unit="ft" />
+                                </div>
+                                
+                                <div className="bg-gray-800 p-6 rounded-xl shadow-lg">
+                                    <h3 className="text-lg font-semibold text-cyan-400 mb-3 flex items-center"><Droplets className="w-5 h-5 mr-2"/>Submergence & Levels</h3>
+                                    <ResultRow label="Min. Turns Required" value={results.minTurns} unit="turns" />
+                                    <ResultRow label="Normal Level Rec." value={results.normalLevel} unit="in" />
+                                    <ResultRow label="Low-Low Level Alarm" value={results.lowLowLevel} unit="in" />
+                                    <ResultRow label="High-High Level Alarm" value={results.highHighLevel} unit="in" />
+                                    <ResultRow label="Vessel Boil-off Rate" value={results.boilOffRate} unit="lb/hr" />
+                                </div>
+                                
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </>
+    );
+}
