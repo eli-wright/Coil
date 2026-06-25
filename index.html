@@ -72,6 +72,39 @@ body::before{
 }
 .brandmark{display:flex;align-items:center;gap:14px;}
 .brandmark svg{width:62px;height:62px;filter: drop-shadow(0 6px 18px rgba(200,165,100,.25))}
+
+/* ── Logo motion — the coil traces itself ────────────────────────────────
+   Each wave draws on over ~2 s (like winding the coil), settles into its
+   resting position, holds a beat, then the cycle repeats. Staggered top→
+   bottom so the three windings trace in sequence. Fades at the loop seam so
+   the reset is invisible — no snap. Restrained and on-brand. */
+.hlx-mark{ transform-box: fill-box; transform-origin: center; }
+.hlx-flow{
+  stroke-dasharray: 58;
+  animation: hlxDraw 6s ease-in-out infinite;
+}
+.hlx-flow-1{ animation-delay: 0s;    }
+.hlx-flow-2{ animation-delay: .4s;   }
+.hlx-flow-3{ animation-delay: .8s;   }
+@keyframes hlxDraw{
+  0%   { stroke-dashoffset: 58; opacity: 0; }   /* undrawn, invisible */
+  14%  { opacity: 1; }                           /* fade in as it starts tracing */
+  55%  { stroke-dashoffset: 0;  opacity: 1; }    /* fully drawn — resting position */
+  86%  { stroke-dashoffset: 0;  opacity: 1; }    /* hold at rest */
+  100% { stroke-dashoffset: 0;  opacity: 0; }    /* fade out just before the loop seam */
+}
+.hlx-node{
+  transform-box: fill-box; transform-origin: center;
+  animation: hlxPulse 6s ease-in-out infinite;
+}
+@keyframes hlxPulse{
+  0%,100%{ transform: scale(.7); opacity: .5; }
+  55%    { transform: scale(1);  opacity: 1;  }
+}
+@media (prefers-reduced-motion: reduce){
+  .hlx-flow, .hlx-node{ animation: none; opacity: 1; stroke-dashoffset: 0; }
+}
+
 .brandmark .word{
   font-family:'Fraunces',serif;font-weight:300;font-size: 30px;
   letter-spacing: .55em; color: var(--paper);
@@ -699,13 +732,13 @@ footer .seal svg{width: 22px; height: 22px}
 <header class="hero">
   <div class="hero-grid">
     <div class="brandmark">
-      <svg viewBox="0 0 64 64" fill="none">
-        <circle cx="32" cy="32" r="30" stroke="#c8a564" stroke-width="1"/>
-        <circle cx="32" cy="32" r="22" stroke="#c8a564" stroke-width=".6" opacity=".5"/>
-        <path d="M14 32 Q22 22, 32 32 T 50 32" stroke="#e0bf7d" stroke-width="1.4" fill="none"/>
-        <path d="M14 38 Q22 28, 32 38 T 50 38" stroke="#e0bf7d" stroke-width="1.4" fill="none" opacity=".7"/>
-        <path d="M14 26 Q22 16, 32 26 T 50 26" stroke="#e0bf7d" stroke-width="1.4" fill="none" opacity=".5"/>
-        <circle cx="32" cy="32" r="2" fill="#e0bf7d"/>
+      <svg viewBox="0 0 64 64" fill="none" class="hlx-mark">
+        <circle cx="32" cy="32" r="30" stroke="#c8a564" stroke-width="1" class="hlx-ring"/>
+        <circle cx="32" cy="32" r="22" stroke="#c8a564" stroke-width=".6" opacity=".5" class="hlx-ring2"/>
+        <path d="M14 32 Q22 22, 32 32 T 50 32" stroke="#e0bf7d" stroke-width="1.4" fill="none" class="hlx-flow hlx-flow-1"/>
+        <path d="M14 38 Q22 28, 32 38 T 50 38" stroke="#e0bf7d" stroke-width="1.4" fill="none" opacity=".7" class="hlx-flow hlx-flow-2"/>
+        <path d="M14 26 Q22 16, 32 26 T 50 26" stroke="#e0bf7d" stroke-width="1.4" fill="none" opacity=".5" class="hlx-flow hlx-flow-3"/>
+        <circle cx="32" cy="32" r="2" fill="#e0bf7d" class="hlx-node"/>
       </svg>
       <div class="word">H<span class="gold">ELI</span>X</div>
     </div>
@@ -1386,7 +1419,36 @@ footer .seal svg{width: 22px; height: 22px}
 
       <div class="section-divider">
         <span class="num">I</span>
-        <span class="label">Operation Preset</span>
+        <span class="label">Vessel</span>
+        <span class="rule"></span>
+      </div>
+
+      <div class="form-row">
+        <div class="field">
+          <div class="field-label">Vessel ID <span class="unit">in</span></div>
+          <input type="number" id="bo_vessel_id" value="48" step="0.25" min="12">
+        </div>
+        <div class="field">
+          <div class="field-label">Vessel Type</div>
+          <select id="bo_vessel_type">
+            <option value="accumulator" selected>Vertical Accumulator</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="field">
+          <div class="field-label">Vessel S/S Length <span class="unit">in</span></div>
+          <input type="number" id="bo_vessel_ss" value="147" step="0.5" min="36">
+        </div>
+        <div class="field">
+          <div class="field-label">Liquid Level <span class="unit">% of vessel</span></div>
+          <input type="number" id="bo_liquid_level" value="70" min="20" max="95" step="1">
+        </div>
+      </div>
+
+      <div class="section-divider">
+        <span class="num">II</span>
+        <span class="label">Operation</span>
         <span class="rule"></span>
       </div>
 
@@ -1410,8 +1472,8 @@ footer .seal svg{width: 22px; height: 22px}
       <div id="bo-preset-desc" style="font-family:'Cormorant Garamond',serif;font-style:italic;font-size:13.5px;color:var(--mute);padding:4px 4px 12px;line-height:1.45"></div>
 
       <div class="section-divider">
-        <span class="num">II</span>
-        <span class="label">Process Conditions</span>
+        <span class="num">III</span>
+        <span class="label">Process</span>
         <span class="rule"></span>
       </div>
 
@@ -1445,33 +1507,20 @@ footer .seal svg{width: 22px; height: 22px}
           <input type="number" id="bo_heat_loss_U" value="0.05" step="0.01" min="0">
         </div>
       </div>
+      <div class="form-row">
+        <div class="field">
+          <div class="field-label">Target Cycle Time <span class="unit">min · optional</span></div>
+          <input type="number" id="bo_target_cycle" value="" placeholder="for Size to Target" step="1" min="1">
+        </div>
+        <div class="field"></div>
+      </div>
 
       <div class="section-divider">
-        <span class="num">III</span>
-        <span class="label">Vessel & Coil</span>
+        <span class="num">IV</span>
+        <span class="label">Selected Coil</span>
         <span class="rule"></span>
       </div>
 
-      <div class="form-row">
-        <div class="field">
-          <div class="field-label">Vessel ID <span class="unit">in</span></div>
-          <input type="number" id="bo_vessel_id" value="48" step="0.25" min="12">
-        </div>
-        <div class="field">
-          <div class="field-label">Vessel S/S Length <span class="unit">in</span></div>
-          <input type="number" id="bo_vessel_ss" value="147" step="0.5" min="36">
-        </div>
-      </div>
-      <div class="form-row">
-        <div class="field">
-          <div class="field-label">Liquid Level <span class="unit">% of vessel</span></div>
-          <input type="number" id="bo_liquid_level" value="70" min="20" max="95" step="1">
-        </div>
-        <div class="field">
-          <div class="field-label">Min Radial Clearance <span class="unit">in</span></div>
-          <input type="number" id="bo_clearance" value="2" step="0.25">
-        </div>
-      </div>
       <div class="form-row">
         <div class="field">
           <div class="field-label">Pipe Size</div>
@@ -1490,12 +1539,6 @@ footer .seal svg{width: 22px; height: 22px}
           </select>
         </div>
         <div class="field">
-          <div class="field-label">Linear Length <span class="unit">ft</span></div>
-          <input type="number" id="bo_length" value="168" min="20" step="1">
-        </div>
-      </div>
-      <div class="form-row">
-        <div class="field">
           <div class="field-label">Number of Windings</div>
           <select id="bo_n_windings">
             <option value="1">1 — Single-Wound</option>
@@ -1505,6 +1548,18 @@ footer .seal svg{width: 22px; height: 22px}
             <option value="6">6 — Six-Wound</option>
           </select>
         </div>
+      </div>
+      <div class="form-row">
+        <div class="field">
+          <div class="field-label">Linear Length <span class="unit">ft</span></div>
+          <input type="number" id="bo_length" value="168" min="20" step="1">
+        </div>
+        <div class="field">
+          <div class="field-label">Pitch <span class="unit">in C/L to C/L</span></div>
+          <input type="number" id="bo_pitch" value="3.5" step="0.25">
+        </div>
+      </div>
+      <div class="form-row">
         <div class="field">
           <div class="field-label">Manifold Header</div>
           <select id="bo_header">
@@ -1515,22 +1570,39 @@ footer .seal svg{width: 22px; height: 22px}
             <option value="6">6″ header</option>
           </select>
         </div>
-      </div>
-      <div class="form-row">
-        <div class="field">
-          <div class="field-label">Pitch <span class="unit">in C/L to C/L</span></div>
-          <input type="number" id="bo_pitch" value="3.5" step="0.25">
-        </div>
         <div class="field">
           <div class="field-label">Fouling Factor <span class="unit">hr·ft²·°F/BTU</span></div>
           <input type="number" id="bo_fouling" value="0.00025" step="0.0001">
         </div>
       </div>
 
+      <div class="section-divider">
+        <span class="num">V</span>
+        <span class="label">Advanced</span>
+        <span class="rule"></span>
+      </div>
+
+      <div class="form-row">
+        <div class="field">
+          <div class="field-label">Min Radial Clearance <span class="unit">in</span></div>
+          <input type="number" id="bo_clearance" value="2" step="0.25">
+        </div>
+        <div class="field"></div>
+      </div>
+
       <div class="actions">
         <button class="btn primary" id="bo-calc"><span class="ico">◆</span>Compute Cycle</button>
+        <button class="btn primary" id="bo-size-target" disabled title="Enter a target cycle time to size to it."><span class="ico">⊕</span>Size to Target</button>
+        <button class="btn primary" id="bo-force"><span class="ico">⚡</span>Force Compute</button>
+        <button class="btn primary" id="bo-optimize"><span class="ico">★</span>Optimize Coil</button>
+        <button class="btn" id="bo-pdf"><span class="ico">▤</span>PDF Report</button>
         <button class="btn ghost" id="bo-reset"><span class="ico">○</span>Reset Preset</button>
       </div>
+
+      <div id="bo-size-status" style="display:none; margin-top:12px; padding:12px 14px;
+           border:1px solid rgba(125,170,90,0.45); border-radius:3px;
+           background:rgba(125,170,90,0.07);
+           font-family:'Cormorant Garamond',serif;font-size:13.5px;color:var(--paper-2);line-height:1.55;"></div>
 
       <div id="bo-calib-warning" style="display:none; margin-top:14px; padding:10px 14px;
            border:1px solid rgba(192,112,14,0.55); border-radius:3px;
@@ -1558,6 +1630,7 @@ footer .seal svg{width: 22px; height: 22px}
             <span id="bo-topology-banner-text" style="font-family:'Cormorant Garamond',serif;font-style:italic;font-size:14px;color:var(--paper-2);line-height:1.45"></span>
           </div>
           <div class="geometry-stats" id="bo-geo-grid"></div>
+
           <div class="prop-card">
             <h4>Linear Footage Breakdown</h4>
             <div class="prop-grid" id="bo-footage-grid"></div>
@@ -1791,11 +1864,22 @@ footer .seal svg{width: 22px; height: 22px}
         <span class="label">Design Verdict</span>
         <span class="rule"></span>
       </div>
-      <div class="metric-grid" id="bo-verdict-grid" style="grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px"></div>
+      <div class="criteria" style="margin-top:6px">
+        <div id="bo-verdict-grid"></div>
+      </div>
 
-      <!-- Patch E2 · PDF Report button -->
-      <div class="actions" style="margin-top:18px;border-top:1px solid var(--line);padding-top:18px">
-        <button class="btn" id="bo-pdf"><span class="ico">▤</span>PDF Report</button>
+      <div class="section-divider">
+        <span class="num">07</span>
+        <span class="label">Construction Views</span>
+        <span class="rule"></span>
+      </div>
+      <div class="diagram-wrap">
+        <h3>Coil · Plan View</h3>
+        <svg viewBox="0 0 470 470" id="bo-plan-svg"></svg>
+      </div>
+      <div class="diagram-wrap">
+        <h3>Coil · Front Elevation</h3>
+        <svg viewBox="0 0 660 470" id="bo-front-svg"></svg>
       </div>
 
     </div>
@@ -1829,6 +1913,35 @@ footer .seal svg{width: 22px; height: 22px}
 
       <div class="section-divider">
         <span class="num">I</span>
+        <span class="label">Vessel</span>
+        <span class="rule"></span>
+      </div>
+
+      <div class="form-row">
+        <div class="field">
+          <div class="field-label">Vessel ID <span class="unit">in</span></div>
+          <input type="number" id="hr_vessel_id" value="48" step="0.25" min="12">
+        </div>
+        <div class="field">
+          <div class="field-label">Vessel Type</div>
+          <select id="hr_vessel_type">
+            <option value="accumulator" selected>Vertical Accumulator</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="field">
+          <div class="field-label">Vessel S/S Length <span class="unit">in</span></div>
+          <input type="number" id="hr_vessel_ss" value="147" step="0.5" min="36">
+        </div>
+        <div class="field">
+          <div class="field-label">Liquid Level <span class="unit">% of vessel</span></div>
+          <input type="number" id="hr_liquid_level" value="70" min="20" max="95" step="1">
+        </div>
+      </div>
+
+      <div class="section-divider">
+        <span class="num">II</span>
         <span class="label">Recovery Service</span>
         <span class="rule"></span>
       </div>
@@ -1859,7 +1972,7 @@ footer .seal svg{width: 22px; height: 22px}
       </div>
 
       <div class="section-divider">
-        <span class="num">II</span>
+        <span class="num">III</span>
         <span class="label">Target (optional)</span>
         <span class="rule"></span>
       </div>
@@ -1880,31 +1993,11 @@ footer .seal svg{width: 22px; height: 22px}
       </div>
 
       <div class="section-divider">
-        <span class="num">III</span>
-        <span class="label">Vessel & Coil</span>
+        <span class="num">IV</span>
+        <span class="label">Selected Coil</span>
         <span class="rule"></span>
       </div>
 
-      <div class="form-row">
-        <div class="field">
-          <div class="field-label">Vessel ID <span class="unit">in</span></div>
-          <input type="number" id="hr_vessel_id" value="48" step="0.25" min="12">
-        </div>
-        <div class="field">
-          <div class="field-label">Vessel S/S Length <span class="unit">in</span></div>
-          <input type="number" id="hr_vessel_ss" value="147" step="0.5" min="36">
-        </div>
-      </div>
-      <div class="form-row">
-        <div class="field">
-          <div class="field-label">Liquid Level <span class="unit">% of vessel</span></div>
-          <input type="number" id="hr_liquid_level" value="70" min="20" max="95" step="1">
-        </div>
-        <div class="field">
-          <div class="field-label">Min Radial Clearance <span class="unit">in</span></div>
-          <input type="number" id="hr_clearance" value="2" step="0.25">
-        </div>
-      </div>
       <div class="form-row">
         <div class="field">
           <div class="field-label">Pipe Size</div>
@@ -1923,12 +2016,6 @@ footer .seal svg{width: 22px; height: 22px}
           </select>
         </div>
         <div class="field">
-          <div class="field-label">Linear Length <span class="unit">ft</span></div>
-          <input type="number" id="hr_length" value="168" min="20" step="1">
-        </div>
-      </div>
-      <div class="form-row">
-        <div class="field">
           <div class="field-label">Number of Windings</div>
           <select id="hr_n_windings">
             <option value="1">1 — Single-Wound</option>
@@ -1938,6 +2025,18 @@ footer .seal svg{width: 22px; height: 22px}
             <option value="6">6 — Six-Wound</option>
           </select>
         </div>
+      </div>
+      <div class="form-row">
+        <div class="field">
+          <div class="field-label">Linear Length <span class="unit">ft</span></div>
+          <input type="number" id="hr_length" value="168" min="20" step="1">
+        </div>
+        <div class="field">
+          <div class="field-label">Pitch <span class="unit">in C/L to C/L</span></div>
+          <input type="number" id="hr_pitch" value="3.5" step="0.25">
+        </div>
+      </div>
+      <div class="form-row">
         <div class="field">
           <div class="field-label">Manifold Header</div>
           <select id="hr_header">
@@ -1948,21 +2047,32 @@ footer .seal svg{width: 22px; height: 22px}
             <option value="6">6″ header</option>
           </select>
         </div>
-      </div>
-      <div class="form-row">
-        <div class="field">
-          <div class="field-label">Pitch <span class="unit">in C/L to C/L</span></div>
-          <input type="number" id="hr_pitch" value="3.5" step="0.25">
-        </div>
         <div class="field">
           <div class="field-label">Fouling Factor <span class="unit">hr·ft²·°F/BTU</span></div>
           <input type="number" id="hr_fouling" value="0.0005" step="0.0001">
         </div>
       </div>
 
+      <div class="section-divider">
+        <span class="num">V</span>
+        <span class="label">Advanced</span>
+        <span class="rule"></span>
+      </div>
+
+      <div class="form-row">
+        <div class="field">
+          <div class="field-label">Min Radial Clearance <span class="unit">in</span></div>
+          <input type="number" id="hr_clearance" value="2" step="0.25">
+        </div>
+        <div class="field"></div>
+      </div>
+
       <div class="actions">
         <button class="btn primary" id="hr-calc"><span class="ico">◆</span>Compute</button>
         <button class="btn primary" id="hr-size-target"><span class="ico">⊕</span>Size to Target</button>
+        <button class="btn primary" id="hr-force"><span class="ico">⚡</span>Force Compute</button>
+        <button class="btn primary" id="hr-optimize"><span class="ico">★</span>Optimize Coil</button>
+        <button class="btn" id="hr-pdf"><span class="ico">▤</span>PDF Report</button>
         <button class="btn ghost" id="hr-reset"><span class="ico">○</span>Reset</button>
       </div>
 
@@ -2235,11 +2345,22 @@ footer .seal svg{width: 22px; height: 22px}
         <span class="label">Design Verdict</span>
         <span class="rule"></span>
       </div>
-      <div class="metric-grid" id="hr-verdict-grid" style="grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px"></div>
+      <div class="criteria" style="margin-top:6px">
+        <div id="hr-verdict-grid"></div>
+      </div>
 
-      <!-- Patch E3 · PDF Report button -->
-      <div class="actions" style="margin-top:18px;border-top:1px solid var(--line);padding-top:18px">
-        <button class="btn" id="hr-pdf"><span class="ico">▤</span>PDF Report</button>
+      <div class="section-divider">
+        <span class="num">06</span>
+        <span class="label">Construction Views</span>
+        <span class="rule"></span>
+      </div>
+      <div class="diagram-wrap">
+        <h3>Coil · Plan View</h3>
+        <svg viewBox="0 0 470 470" id="hr-plan-svg"></svg>
+      </div>
+      <div class="diagram-wrap">
+        <h3>Coil · Front Elevation</h3>
+        <svg viewBox="0 0 660 470" id="hr-front-svg"></svg>
       </div>
 
     </div>
@@ -5698,6 +5819,29 @@ function boilout_compute(I){
   const Q_peak = slice_init.Q;
   const peak_flux = Q_peak / A_o;   // Btu/hr·ft²
 
+  // ─── Boil-to-empty physics ──────────────────────────────────────────────
+  // True boil-out: once the pool is at saturation, net coil heat vaporizes
+  // liquid rather than warming it. Boil-off rate = Q_net / h_fg at the pool
+  // temperature; time-to-empty = liquid charge / boil-off rate. We report
+  // this at the TARGET bath temperature (the boiling plateau the cycle warms
+  // the vessel up to), which is the steady operating point for emptying.
+  // The rate is the FULLY-SUBMERGED (best-case) value; as the level drops the
+  // coil uncovers, h_o collapses on the exposed turns, and the real rate
+  // falls — so the time-to-empty is a lower-bound estimate, flagged as such.
+  const boilSat   = nh3Sat(final_state.T_bath);
+  const Q_boil    = final_state.Q;                                  // Btu/hr at plateau
+  const Q_loss_bo = I.heat_loss_U * A_shell * Math.max(0, final_state.T_bath - I.ambient_temp);
+  const Q_net_bo  = Math.max(0, Q_boil - Q_loss_bo);                // heat available to vaporize
+  const h_fg_bath = Math.max(boilSat.h_fg, 1);                      // Btu/lb
+  const boiloff_lbhr   = Q_net_bo / h_fg_bath;                      // lb/hr NH3 vaporized
+  const boiloff_lbmin  = boiloff_lbhr / 60;
+  // Vapor volumetric rate at saturation (check against relief/vent line).
+  const rho_v_bath = boilSat.rho_v || nh3SatVapor(final_state.T_bath).rho_v || 0.04;
+  const vapor_acfm = rho_v_bath > 0 ? (boiloff_lbhr / rho_v_bath) / 60 : 0;   // ft³/min at pool P
+  // Time to boil the vessel dry from the starting liquid charge.
+  const time_to_empty_hr  = boiloff_lbhr > 1e-6 ? M_bath / boiloff_lbhr : Infinity;
+  const time_to_empty_min = time_to_empty_hr * 60;
+
   // Geometry calcs (mirror subcooler's geometry block for consistency)
   const head = headDepth(I.vessel_id);
   const head_top_depth_in = head.inside_depth_in;
@@ -5750,6 +5894,15 @@ function boilout_compute(I){
     Q_peak,
     Q_peak_TR: Q_peak / 12000,
     peak_flux,
+
+    // Boil-to-empty
+    boiloff_lbhr,
+    boiloff_lbmin,
+    vapor_acfm,
+    h_fg_bath,
+    Q_net_boiloff: Q_net_bo,
+    time_to_empty_hr,
+    time_to_empty_min,
 
     // Coil-side report numbers at t=0 (peak duty)
     init: slice_init,
@@ -5846,18 +5999,20 @@ function boilout_render(I, R){
       ? (v_init >= 15 && v_init <= 80 ? '✓ in 15–80 ft/s gas range' : v_init < 15 ? '⚠ below 15 ft/s gas range' : '⚠ above 80 ft/s gas range')
       : (v_init >= 3 && v_init <= 7 ? '✓ in 3–7 ft/s IIAR range' : v_init < 3 ? '⚠ below 3 ft/s IIAR range' : '⚠ above 7 ft/s IIAR range');
     grid.innerHTML = `
-      <div class="stat"><span class="lab">Cycle time</span><span class="val">${R.reached_target ? R.cycle_min.toFixed(1)+' min' : '—'}</span></div>
-      <div class="stat"><span class="lab">Total energy</span><span class="val">${R.total_energy_btu.toLocaleString('en-US',{maximumFractionDigits:0})} Btu</span></div>
-      <div class="stat"><span class="lab">Average duty</span><span class="val">${R.avg_duty_btuhr.toLocaleString('en-US',{maximumFractionDigits:0})} Btu/hr · ${R.avg_duty_TR.toFixed(2)} TR</span></div>
-      <div class="stat"><span class="lab">Peak duty (t=0)</span><span class="val">${R.Q_peak.toLocaleString('en-US',{maximumFractionDigits:0})} Btu/hr · ${R.Q_peak_TR.toFixed(2)} TR</span></div>
-      <div class="stat"><span class="lab">Peak heat flux</span><span class="val">${peakFlux_str} Btu/hr·ft²</span></div>
-      <div class="stat"><span class="lab">Coil outlet T (start)</span><span class="val">${R.init.T_out_coil.toFixed(1)} °F</span></div>
-      <div class="stat"><span class="lab">Coil outlet T (end)</span><span class="val">${R.final.T_out_coil.toFixed(1)} °F</span></div>
-      <div class="stat"><span class="lab">Coil-side velocity</span><span class="val">${R.init.V_fps.toFixed(2)} ft/s &nbsp;<em style="color:var(--mute);font-size:11px">${fluid_v_check}</em></span></div>
-      <div class="stat"><span class="lab">Reynolds (at start)</span><span class="val">${R.init.Re.toLocaleString('en-US',{maximumFractionDigits:0})}</span></div>
-      <div class="stat"><span class="lab">U₀ (at start)</span><span class="val">${R.init.U_o.toFixed(1)} Btu/hr·ft²·°F</span></div>
-      <div class="stat"><span class="lab">Bath inventory</span><span class="val">${R.bath_mass_lb.toFixed(0)} lb &nbsp;<em style="color:var(--mute);font-size:11px">${R.bath_volume_ft3.toFixed(1)} ft³ · liquid NH₃</em></span></div>
-      <div class="stat"><span class="lab">Net submergence</span><span class="val">${R.net_submergence_in.toFixed(1)} in &nbsp;<em style="color:var(--mute);font-size:11px">after 6″ swell</em></span></div>
+      <div class="metric accent"><div class="lbl">Cycle Time</div><div class="val">${R.reached_target ? R.cycle_min.toFixed(1) : '—'}<span class="u">min</span></div></div>
+      <div class="metric"><div class="lbl">Total Energy</div><div class="val">${R.total_energy_btu.toLocaleString('en-US',{maximumFractionDigits:0})}<span class="u">Btu</span></div></div>
+      <div class="metric"><div class="lbl">Average Duty</div><div class="val">${R.avg_duty_TR.toFixed(1)}<span class="u">TR</span></div></div>
+      <div class="metric"><div class="lbl">Peak Duty (t=0)</div><div class="val">${R.Q_peak_TR.toFixed(1)}<span class="u">TR</span></div></div>
+      <div class="metric"><div class="lbl">Peak Heat Flux</div><div class="val">${peakFlux_str}<span class="u">Btu/hr·ft²</span></div></div>
+      <div class="metric"><div class="lbl">Coil-Side Velocity</div><div class="val">${R.init.V_fps.toFixed(2)}<span class="u">ft/s</span></div></div>
+      <div class="metric"><div class="lbl">Coil Outlet (start → end)</div><div class="val">${R.init.T_out_coil.toFixed(0)}→${R.final.T_out_coil.toFixed(0)}<span class="u">°F</span></div></div>
+      <div class="metric"><div class="lbl">Reynolds (start)</div><div class="val">${(R.init.Re/1000).toFixed(0)}<span class="u">k</span></div></div>
+      <div class="metric"><div class="lbl">Overall U₀ (start)</div><div class="val">${R.init.U_o.toFixed(0)}<span class="u">Btu/hr·ft²·°F</span></div></div>
+      <div class="metric"><div class="lbl">Bath Inventory</div><div class="val">${R.bath_mass_lb.toFixed(0)}<span class="u">lb NH₃</span></div></div>
+      <div class="metric accent"><div class="lbl">Boil-Off Rate</div><div class="val">${R.boiloff_lbmin.toFixed(1)}<span class="u">lb/min</span></div></div>
+      <div class="metric"><div class="lbl">Time to Boil Dry</div><div class="val">${isFinite(R.time_to_empty_min) ? R.time_to_empty_min.toFixed(0) : '—'}<span class="u">min</span></div></div>
+      <div class="metric"><div class="lbl">Vapor Generation</div><div class="val">${R.vapor_acfm.toFixed(0)}<span class="u">ACFM</span></div></div>
+      <div class="metric"><div class="lbl">Net Submergence</div><div class="val">${R.net_submergence_in.toFixed(1)}<span class="u">in</span></div></div>
     `;
   }
 
@@ -5958,6 +6113,13 @@ function boilout_renderGeometry(I, R){
   const TOPO_NAME = {1:'Single-Wound', 2:'Double-Wound', 3:'Triple-Wound', 4:'Quadruple-Wound', 6:'Six-Wound'};
   const topoName = TOPO_NAME[I.n_windings] || `${I.n_windings}-Wound`;
   const headerNote = I.header ? ` with ${I.header}″ manifold header` : '';
+
+  // Construction views — shared builders, ink theme for the app (pool-boiling
+  // mode shows submergence, since boil-out coils run submerged).
+  const frontEl = $('bo-front-svg');
+  if (frontEl) setSvgContent(frontEl, buildFrontViewSVG(I, R, 'ink', 'boFvApp'));
+  const planEl = $('bo-plan-svg');
+  if (planEl) setSvgContent(planEl, buildPlanViewSVG(I, R, 'ink', 'boPvApp'));
 
   // Derive per-winding arc lengths (boilout_compute doesn't expose them)
   const cls = (I.winding_cls && I.winding_cls.length) ? I.winding_cls : [I.coil_od];
@@ -6238,19 +6400,54 @@ function boilout_renderVerdict(I, R){
     </div>`;
   }
 
+  // Subcooler-style criteria rows: name · mono detail · colored PASS/MARGINAL/FAIL pill.
+  // badge is 'pass' | 'warn' | 'fail'; text is the pill word.
+  function row(name, detail, badge){
+    const text = badge === 'pass' ? 'PASS' : badge === 'warn' ? 'MARGINAL' : 'FAIL';
+    return `<div class="crit-row">
+      <div>
+        <div class="crit-name">${name}</div>
+        <div class="crit-detail">${detail}</div>
+      </div>
+      <span class="crit-badge ${badge}">${text}</span>
+    </div>`;
+  }
+  const tri = (pass, warn) => pass ? 'pass' : (warn ? 'warn' : 'fail');
+
   grid.innerHTML =
-    chip('Target reachable',      reach_pass, R.reached_target
-                                              ? `reaches ${R.T_target_bath} °F`
-                                              : R.asymptote_flagged
-                                                ? `asymptotes near ${R.asymptote_T.toFixed(1)} °F`
-                                                : `timeout @ ${R.final.T_bath.toFixed(1)} °F`) +
-    chip('Cycle time envelope',   time_pass, envelope ? `${R.cycle_min.toFixed(0)} min (range ${envelope.min_min}–${envelope.max_min})` : '—') +
-    chip(isGas ? 'Velocity (gas)' : 'Velocity (liquid)', v_pass, `${v_init.toFixed(2)} ft/s (${v_lo}–${v_hi})`) +
-    chip('Reynolds turbulent',    re_pass,   `${R.init.Re.toLocaleString('en-US',{maximumFractionDigits:0})} (≥ 10k)`) +
-    chip('Submergence margin',    sub_pass,  `${R.net_submergence_in.toFixed(1)} in (≥ 0)`) +
-    chip('Radial clearance',      clear_pass, `${R.vessel_radial_clear.toFixed(2)} in (≥ ${I.clearance})`) +
-    chip('Pitch gap',             pitch_pass, `${R.pitch_clearance.toFixed(2)} in (≥ 0.5)`) +
-    chip('Peak heat flux',        flux_pass, `${R.peak_flux.toFixed(0)} Btu/hr·ft² (< 10,000)`);
+    row('Target Reachable',
+        R.reached_target ? `Warms bath to ${R.T_target_bath} °F` :
+        R.asymptote_flagged ? `Asymptotes near ${R.asymptote_T.toFixed(1)} °F — never reaches target` :
+        `Times out at ${R.final.T_bath.toFixed(1)} °F`,
+        R.reached_target ? 'pass' : 'fail') +
+    row('Cycle Time Envelope',
+        envelope ? `${R.cycle_min.toFixed(1)} min · preset range ${envelope.min_min}–${envelope.max_min} min` : `${R.cycle_min.toFixed(1)} min · no preset envelope`,
+        envelope ? tri(R.cycle_min >= envelope.min_min && R.cycle_min <= envelope.max_min,
+                       R.cycle_min >= envelope.min_min*0.5 && R.cycle_min <= envelope.max_min*1.5) : 'pass') +
+    row(isGas ? 'Coil-Side Velocity (gas)' : 'Coil-Side Velocity (liquid)',
+        `${v_init.toFixed(2)} ft/s · need ${v_lo}–${v_hi} ft/s`,
+        tri(v_pass, v_init >= v_lo*0.8 && v_init <= v_hi*1.1)) +
+    row('Flow Regime',
+        `Re ${R.init.Re.toLocaleString('en-US',{maximumFractionDigits:0})} · need ≥ 10,000 (turbulent)`,
+        tri(re_pass, R.init.Re >= 4000)) +
+    row('Submergence',
+        `${R.net_submergence_in.toFixed(1)} in over coil top · need ≥ 0 (after 6″ swell)`,
+        tri(sub_pass, R.net_submergence_in >= -2)) +
+    row('Radial Clearance',
+        `${R.vessel_radial_clear.toFixed(2)} in coil-to-wall · need ≥ ${I.clearance} in`,
+        tri(clear_pass, R.vessel_radial_clear >= I.clearance - 0.5)) +
+    row('Pitch Gap',
+        `${R.pitch_clearance.toFixed(2)} in pipe-to-pipe · need ≥ 1.0 in`,
+        tri(R.pitch_clearance >= 1.0, R.pitch_clearance >= 0.5)) +
+    (I.winding_cls.length > 1 ? row('Inter-Winding Gap',
+        `${(6 - R.OD).toFixed(2)} in edge-to-edge · need ≥ 0.5 in`,
+        tri((6 - R.OD) >= 0.5, (6 - R.OD) >= 0)) : '') +
+    row('Coil Fits Shell',
+        `${R.coil_height_in.toFixed(1)} in tall · ${R.vessel_ss_in.toFixed(0)} in S/S available`,
+        tri(R.coil_height_in <= R.vessel_ss_in*0.95, R.coil_height_in <= R.vessel_ss_in)) +
+    row('Peak Heat Flux',
+        `${R.peak_flux.toFixed(0)} Btu/hr·ft² · guideline < 10,000 (heating)`,
+        tri(R.peak_flux < 8000, R.peak_flux < 10000));
 }
 
 
@@ -6467,6 +6664,17 @@ ${extrap_warn ? `<div class="warning-banner"><strong style="font-style:normal">�
   <div class="kv"><span class="k">Peak heat flux</span><span class="v">${R.peak_flux.toFixed(0)} Btu/hr·ft²</span></div>
 </div>
 
+<h2><span class="num">06</span>Boil-to-Empty</h2>
+<div class="reasoning">At the ${R.T_target_bath.toFixed(0)} °F boiling plateau, net coil heat (after shell loss) vaporizes liquid rather than warming it. Boil-off rate = Q_net ÷ h_fg; time-to-empty = liquid charge ÷ boil-off rate. Rate shown is the fully-submerged best case — as the level drops the coil uncovers, shell-side h_o collapses on the exposed turns, and the actual rate falls, so time-to-empty is a lower-bound estimate. Verify vapor generation against the relief/vent line capacity before relying on it.</div>
+<div class="compact-grid">
+  <div class="kv"><span class="k">Boil-off rate</span><span class="v">${R.boiloff_lbhr.toLocaleString('en-US',{maximumFractionDigits:0})} lb/hr (${R.boiloff_lbmin.toFixed(1)} lb/min)</span></div>
+  <div class="kv"><span class="k">Latent heat h_fg</span><span class="v">${R.h_fg_bath.toFixed(0)} Btu/lb @ ${R.T_target_bath.toFixed(0)} °F</span></div>
+  <div class="kv"><span class="k">Liquid charge</span><span class="v">${R.bath_mass_lb.toFixed(0)} lb (${R.bath_volume_ft3.toFixed(1)} ft³)</span></div>
+  <div class="kv"><span class="k">Time to boil dry</span><span class="v">${isFinite(R.time_to_empty_min) ? R.time_to_empty_min.toFixed(0)+' min ('+R.time_to_empty_hr.toFixed(1)+' hr)' : '—'}</span></div>
+  <div class="kv"><span class="k">Vapor generation</span><span class="v">${R.vapor_acfm.toFixed(0)} ACFM at pool pressure</span></div>
+  <div class="kv"><span class="k">Net heat to vaporize</span><span class="v">${R.Q_net_boiloff.toLocaleString('en-US',{maximumFractionDigits:0})} Btu/hr</span></div>
+</div>
+
 <div class="verdict-grid">
   <div class="verdict ${R.reached_target ? 'pass' : 'fail'}"><div class="name">Target Reached</div><div class="text">${R.reached_target ? `Yes · ${R.cycle_min.toFixed(1)} min` : 'NO'}</div></div>
   <div class="verdict ${envelope && inEnvelope ? 'pass' : envelope ? 'warn' : 'info'}"><div class="name">Preset Envelope</div><div class="text">${envelope ? `${envelope.min_min}–${envelope.max_min} min ${inEnvelope ? '✓' : '⚠'}` : 'N/A'}</div></div>
@@ -6476,7 +6684,14 @@ ${extrap_warn ? `<div class="warning-banner"><strong style="font-style:normal">�
   <div class="verdict ${R.init?.V_fps >= 3 && R.init?.V_fps <= 80 ? 'pass' : 'warn'}"><div class="name">Velocity</div><div class="text">${R.init?.V_fps?.toFixed(2) || '—'} ft/s</div></div>
 </div>
 
-<h2><span class="num">06</span>Methodology &amp; Scope</h2>
+<h2><span class="num">07</span>Construction Views</h2>
+<div style="display:flex;gap:14px;align-items:flex-start;margin-top:6px">
+  <div style="flex:1.38;min-width:0">${buildFrontViewSVG(I, R, 'paper', 'boPdfFv')}</div>
+  <div style="flex:1;min-width:0">${buildPlanViewSVG(I, R, 'paper', 'boPdfPv')}</div>
+</div>
+<div class="reasoning" style="margin-top:8px">Construction views, as sized — front elevation (coil in vessel, liquid level &amp; submergence shown) and plan view (winding centerlines &amp; radial clearance). Boil-out coils run submerged; verify all dimensions against fabrication drawings before release.</div>
+
+<h2><span class="num">08</span>Methodology &amp; Scope</h2>
 <div class="note">
   <strong style="font-style:normal;color:#3a2e15">Modeled:</strong> Lumped-capacitance bath energy balance (forward-Euler, 5-second steps); coil-side Dittus-Boelter + Schmidt helical correction; pool-boiling shell-side at instantaneous bath T (linear correlation calibrated −25 to +30 °F); heat-loss to ambient through insulated vessel shell; asymptote detection; bath c<sub>p</sub> updated each step from current T.
   <br><br>
@@ -6546,6 +6761,185 @@ function boilout_recompute(){
     try { boilout_renderProperties(I, R); } catch(e){ console.warn('boilout_renderProperties:', e); }
     window._bo_last = { I, R };  // keep for PDF export + sweep
   } catch(e){ console.error('boilout_recompute:', e); }
+}
+
+/* ── Boil-out sizing engine (parity with Subcooler's Size/Force/Optimize) ──
+   The physically meaningful "target" for a boil-out coil is the CYCLE TIME:
+   how fast the coil warms the bath to the target plateau (and, by extension,
+   how fast it can boil the vessel down). Length is the primary lever and the
+   relationship is monotonic — more pipe → more duty → shorter cycle — so a
+   1-D search on length is well-posed, exactly like the subcooler sizes length
+   to an outlet temperature. A design "passes" when it both hits the cycle-time
+   target AND clears every geometry/operational check the boil-out result
+   already computes (fits the shell, stays submerged, honours radial clearance,
+   keeps a positive pitch/inter-winding gap, and holds coil-side velocity in a
+   sane band). These three buttons differ only in search breadth:
+     · Size to Target — search LENGTH at the current pipe/windings
+     · Force Compute  — also search PIPE SIZE and WINDING COUNT
+     · Optimize Coil  — no target; find the fastest cycle that still passes   */
+
+const BO_PIPES = ['1.5_40','2_40','2.5_40','3_40','4_40'];
+const BO_WINDS = [1,2,3,4];
+
+// Pass/fail gate for a boil-out design, mirroring the subcooler's verdict set.
+function boilout_geomOK(I, R){
+  const fails = [];
+  if (R.coil_height_in > R.vessel_ss_in)            fails.push('coil too tall for shell');
+  if (R.net_submergence_in < 0)                     fails.push('coil not submerged');
+  if (R.vessel_radial_clear < I.clearance - 1e-6)   fails.push('radial clearance short');
+  if (R.pitch_clearance < 0.5)                      fails.push('pitch gap < 0.5 in');
+  if (I.winding_cls.length > 1 && (6 - R.OD) < 0)   fails.push('windings interfere');
+  const v = R.init && R.init.V_fps;
+  if (v != null && (v < 2 || v > 80))               fails.push('coil-side velocity out of band');
+  return { ok: fails.length === 0, fails };
+}
+
+// Clone the boil-out input object with a length / pipe / winding override,
+// re-deriving the clearance-aware winding centerlines the same way readInputs
+// does, so a searched design honours the same geometry rules as a typed one.
+function boilout_makeI(baseI, { length, pipe_size, n_windings }){
+  const I = Object.assign({}, baseI);
+  if (length     != null) I.length     = length;
+  if (pipe_size  != null) I.pipe_size  = pipe_size;
+  if (n_windings != null) I.n_windings = n_windings;
+  let cls = computeWindingCLs(I.vessel_id, I.n_windings);
+  // clearance-aware tightening (same logic as the subcooler readInputs path)
+  const od = PIPE[I.pipe_size].od;
+  const stdClear = (I.vessel_id - (cls[0] + od)) / 2;
+  if (stdClear < I.clearance - 1e-9){
+    const outerMax = Math.floor((I.vessel_id - 2*I.clearance - od) * 4) / 4;
+    if (outerMax - 6*(cls.length - 1) >= Math.max(6, 3*od)){
+      cls = cls.map((_, i) => outerMax - 6*i);
+    }
+  }
+  I.winding_cls   = cls;
+  I.coil_od       = cls[0];
+  I.coil_id_inner = cls.length >= 2 ? cls[cls.length-1] : cls[0];
+  I.topology      = I.n_windings === 1 ? 'single' : 'series';
+  return I;
+}
+
+// Find the shortest length (within a pipe/winding choice) that hits the target
+// cycle time and passes the geometry gate. Returns null if none in range does.
+function boilout_sizeLengthForCycle(baseI, targetMin, pipe_size, n_windings){
+  const Lmin = 20, Lmax = 1200;
+  let best = null;
+  // Coarse sweep then refine — cycle time falls monotonically with length.
+  let lastReached = null;
+  for (let L = Lmin; L <= Lmax; L += 5){
+    const I = boilout_makeI(baseI, { length: L, pipe_size, n_windings });
+    const R = boilout_compute(I);
+    if (!R.reached_target) continue;             // can't even reach plateau yet
+    if (R.cycle_min <= targetMin){
+      // first length fast enough — refine between L-5 and L by bisection
+      let lo = L - 5, hi = L;
+      for (let it = 0; it < 22; it++){
+        const mid = (lo + hi) / 2;
+        const Rm = boilout_compute(boilout_makeI(baseI, { length: mid, pipe_size, n_windings }));
+        if (Rm.reached_target && Rm.cycle_min <= targetMin) hi = mid; else lo = mid;
+      }
+      const If = boilout_makeI(baseI, { length: hi, pipe_size, n_windings });
+      const Rf = boilout_compute(If);
+      const gate = boilout_geomOK(If, Rf);
+      best = { I: If, R: Rf, gate, length: hi };
+      break;
+    }
+    lastReached = { length: L };
+  }
+  return best;
+}
+
+function boilout_showStatus(html, tone){
+  const b = $('bo-size-status');
+  if (!b) return;
+  b.style.display = 'block';
+  const c = tone === 'warn' ? '192,112,14' : tone === 'fail' ? '180,70,70' : '125,170,90';
+  b.style.borderColor = `rgba(${c},0.5)`;
+  b.style.background   = `rgba(${c},0.08)`;
+  b.innerHTML = html;
+}
+
+function boilout_applyResult(best){
+  // Push a searched design back into the form fields, then recompute so every
+  // tab + the verdict reflect it exactly (single source of truth = the fields).
+  $('bo_length').value     = best.length.toFixed(0);
+  $('bo_pipe_size').value  = best.I.pipe_size;
+  $('bo_n_windings').value = String(best.I.n_windings);
+  boilout_recompute();
+}
+
+// ── Size to Target — search length at current pipe/windings ──
+function boilout_sizeToTarget(){
+  const baseI = boilout_readInputs();
+  const tgt = +$('bo_target_cycle').value;
+  if (!tgt || isNaN(tgt) || tgt <= 0){
+    boilout_showStatus('<strong style="color:#c0700e">Size to Target needs a goal.</strong> Enter a target cycle time (minutes) in the field above.', 'warn');
+    return;
+  }
+  const best = boilout_sizeLengthForCycle(baseI, tgt, baseI.pipe_size, baseI.n_windings);
+  if (!best){
+    boilout_showStatus(`<strong style="color:#c0700e">No length hits ${tgt} min here.</strong> Even a very long coil of this pipe/winding can't warm the bath to ${baseI.target_bath_temp} °F that fast, or the coil that could won't fit. Try Force Compute (it also searches pipe size and windings), a longer target time, or a hotter heating fluid.`, 'warn');
+    return;
+  }
+  boilout_applyResult(best);
+  const g = best.gate;
+  const flag = g.ok ? '✓ all geometry checks pass' : `⚠ hits the time but ${g.fails.join(', ')}`;
+  boilout_showStatus(`<strong style="color:#5a7a3a">Sized to ${tgt} min.</strong> ${Math.round(best.length)} ft of ${best.I.pipe_size.replace('_',' Sch ')} ${best.I.n_windings === 1 ? 'single' : best.I.n_windings+'×'}-wound → cycle ${best.R.cycle_min.toFixed(1)} min. ${flag}.`, g.ok ? 'ok' : 'warn');
+}
+
+// ── Force Compute — also search pipe size and winding count ──
+function boilout_forceCompute(){
+  const baseI = boilout_readInputs();
+  const tgt = +$('bo_target_cycle').value;
+  if (!tgt || isNaN(tgt) || tgt <= 0){
+    boilout_showStatus('<strong style="color:#c0700e">Force Compute needs a target.</strong> Enter a target cycle time (minutes); Force Compute then searches pipe size and winding count for the cheapest coil that hits it and passes every check.', 'warn');
+    return;
+  }
+  let candidates = [];
+  for (const p of BO_PIPES){
+    for (const w of BO_WINDS){
+      const best = boilout_sizeLengthForCycle(baseI, tgt, p, w);
+      if (best && best.gate.ok){
+        // cost proxy = pipe footage × outer diameter (material), lower is cheaper
+        const cost = best.length * PIPE[p].od;
+        candidates.push(Object.assign({ cost }, best));
+      }
+    }
+  }
+  if (!candidates.length){
+    boilout_showStatus(`<strong style="color:#c0700e">No fully-passing design hits ${tgt} min.</strong> Across every pipe size and winding count, nothing both reaches ${tgt} min and clears all geometry checks in this vessel. Relax the target time, raise the heating-fluid temperature/flow, or accept a flagged design from Size to Target.`, 'fail');
+    return;
+  }
+  candidates.sort((a,b) => a.cost - b.cost);
+  const win = candidates[0];
+  boilout_applyResult(win);
+  boilout_showStatus(`<strong style="color:#5a7a3a">Force Compute — cheapest passing design.</strong> ${Math.round(win.length)} ft of ${win.I.pipe_size.replace('_',' Sch ')} ${win.I.n_windings === 1 ? 'single' : win.I.n_windings+'×'}-wound → cycle ${win.R.cycle_min.toFixed(1)} min, every check green. Searched ${candidates.length} passing combination${candidates.length>1?'s':''}.`, 'ok');
+}
+
+// ── Optimize Coil — no target; fastest cycle that still passes ──
+function boilout_optimizeCoil(){
+  const baseI = boilout_readInputs();
+  let best = null;
+  for (const p of BO_PIPES){
+    for (const w of BO_WINDS){
+      // longest coil that still fits/submerges = most duty = fastest cycle
+      let cand = null;
+      for (let L = 1200; L >= 20; L -= 10){
+        const I = boilout_makeI(baseI, { length: L, pipe_size: p, n_windings: w });
+        const R = boilout_compute(I);
+        if (!R.reached_target) continue;
+        const g = boilout_geomOK(I, R);
+        if (g.ok){ cand = { I, R, gate: g, length: L }; break; }  // first (largest) that passes
+      }
+      if (cand && (!best || cand.R.cycle_min < best.R.cycle_min)) best = cand;
+    }
+  }
+  if (!best){
+    boilout_showStatus('<strong style="color:#c0700e">No passing design found.</strong> Nothing reaches the target plateau while still fitting submerged in this vessel. Check the heating fluid, bath target, or vessel size.', 'fail');
+    return;
+  }
+  boilout_applyResult(best);
+  boilout_showStatus(`<strong style="color:#5a7a3a">Optimized for fastest cycle.</strong> ${Math.round(best.length)} ft of ${best.I.pipe_size.replace('_',' Sch ')} ${best.I.n_windings === 1 ? 'single' : best.I.n_windings+'×'}-wound → cycle ${best.R.cycle_min.toFixed(1)} min, boil-off ${best.R.boiloff_lbmin.toFixed(1)} lb/min, all checks green. This is the most duty the vessel will hold submerged.`, 'ok');
 }
 
 
@@ -6954,21 +7348,20 @@ function hr_render(I, R){
     const re_pass = R.Re >= 10000;
     const dP_pass = R.dP_psi < 10;        // looser for secondary loop than NH3 service
     grid.innerHTML = `
-      <div class="stat"><span class="lab">Recovered duty</span><span class="val">${R.Q.toLocaleString('en-US',{maximumFractionDigits:0})} Btu/hr · ${R.Q_TR.toFixed(2)} TR</span></div>
-      <div class="stat"><span class="lab">Tube-fluid outlet T</span><span class="val">${R.T_out.toFixed(1)} °F</span></div>
-      <div class="stat"><span class="lab">Effectiveness</span><span class="val">${(R.eps*100).toFixed(1)}% (ε)</span></div>
-      <div class="stat"><span class="lab">Approach to bath</span><span class="val">${(R.T_bath - R.T_out).toFixed(1)} °F</span></div>
-      <div class="stat"><span class="lab">LMTD</span><span class="val">${R.LMTD.toFixed(2)} °F</span></div>
-      <div class="stat"><span class="lab">U₀</span><span class="val">${R.U_o.toFixed(1)} Btu/hr·ft²·°F</span></div>
-      <div class="stat"><span class="lab">h<sub>i</sub> (tube)</span><span class="val">${R.h_i.toFixed(1)}</span></div>
-      <div class="stat"><span class="lab">h<sub>o</sub> (bath, free conv.)</span><span class="val">${R.h_o.toFixed(1)} &nbsp;<em style="color:var(--mute);font-size:11px">Churchill-Chu</em></span></div>
-      <div class="stat"><span class="lab">Wall T (outer)</span><span class="val">${R.T_wall_outer.toFixed(1)} °F</span></div>
-      <div class="stat"><span class="lab">Velocity</span><span class="val">${R.V_fps.toFixed(2)} ft/s &nbsp;<em style="color:var(--mute);font-size:11px">${v_pass ? '✓ in 3–7 range' : '⚠ outside range'}</em></span></div>
-      <div class="stat"><span class="lab">Reynolds</span><span class="val">${R.Re.toLocaleString('en-US',{maximumFractionDigits:0})} &nbsp;<em style="color:var(--mute);font-size:11px">${re_pass ? '✓ turbulent' : '⚠ laminar'}</em></span></div>
-      <div class="stat"><span class="lab">Pressure drop</span><span class="val">${R.dP_psi.toFixed(2)} psi &nbsp;<em style="color:var(--mute);font-size:11px">${dP_pass ? '✓' : '⚠ exceeds 10'}</em></span></div>
-      <div class="stat"><span class="lab">Heat transfer area</span><span class="val">${R.A_o.toFixed(1)} ft²</span></div>
-      <div class="stat"><span class="lab">Coil weight</span><span class="val">${R.pipe_lb.toFixed(0)} lb</span></div>
-      <div class="stat"><span class="lab">${R.f_sub < 1.0 ? 'Submerged fraction' : 'Net submergence'}</span><span class="val">${R.f_sub < 1.0 ? (R.f_sub*100).toFixed(0)+'% &nbsp;<em style="color:#c0700e;font-size:11px">⚠ partial</em>' : R.net_submergence_in.toFixed(1)+' in <em style="color:var(--mute);font-size:11px">after 6″ swell</em>'}</span></div>
+      <div class="metric accent"><div class="lbl">Recovered Duty</div><div class="val">${R.Q_TR.toFixed(1)}<span class="u">TR</span></div></div>
+      <div class="metric"><div class="lbl">Tube-Fluid Outlet</div><div class="val">${R.T_out.toFixed(1)}<span class="u">°F</span></div></div>
+      <div class="metric"><div class="lbl">Effectiveness ε</div><div class="val">${(R.eps*100).toFixed(1)}<span class="u">%</span></div></div>
+      <div class="metric"><div class="lbl">Approach to Bath</div><div class="val">${(R.T_bath - R.T_out).toFixed(1)}<span class="u">°F</span></div></div>
+      <div class="metric"><div class="lbl">LMTD</div><div class="val">${R.LMTD.toFixed(1)}<span class="u">°F</span></div></div>
+      <div class="metric"><div class="lbl">Overall U₀</div><div class="val">${R.U_o.toFixed(0)}<span class="u">Btu/hr·ft²·°F</span></div></div>
+      <div class="metric"><div class="lbl">h<sub>i</sub> (tube)</div><div class="val">${R.h_i.toFixed(0)}<span class="u">Btu/hr·ft²·°F</span></div></div>
+      <div class="metric"><div class="lbl">h<sub>o</sub> (free conv.)</div><div class="val">${R.h_o.toFixed(0)}<span class="u">Btu/hr·ft²·°F</span></div></div>
+      <div class="metric"><div class="lbl">Coil-Side Velocity</div><div class="val">${R.V_fps.toFixed(2)}<span class="u">ft/s</span></div></div>
+      <div class="metric"><div class="lbl">Reynolds</div><div class="val">${(R.Re/1000).toFixed(0)}<span class="u">k</span></div></div>
+      <div class="metric"><div class="lbl">Pressure Drop</div><div class="val">${R.dP_psi.toFixed(2)}<span class="u">psi</span></div></div>
+      <div class="metric"><div class="lbl">Heat-Transfer Area</div><div class="val">${R.A_o.toFixed(0)}<span class="u">ft²</span></div></div>
+      <div class="metric"><div class="lbl">Coil Weight</div><div class="val">${R.pipe_lb.toFixed(0)}<span class="u">lb</span></div></div>
+      <div class="metric"><div class="lbl">${R.f_sub < 1.0 ? 'Submerged Fraction' : 'Net Submergence'}</div><div class="val">${R.f_sub < 1.0 ? (R.f_sub*100).toFixed(0) : R.net_submergence_in.toFixed(1)}<span class="u">${R.f_sub < 1.0 ? '%' : 'in'}</span></div></div>
     `;
   }
 
@@ -7001,22 +7394,54 @@ function hr_renderVerdict(I, R){
     </div>`;
   }
 
+  // Subcooler-style criteria rows: name · mono detail · PASS/MARGINAL/FAIL pill.
+  function row(name, detail, badge){
+    const text = badge === 'pass' ? 'PASS' : badge === 'warn' ? 'MARGINAL' : 'FAIL';
+    return `<div class="crit-row">
+      <div>
+        <div class="crit-name">${name}</div>
+        <div class="crit-detail">${detail}</div>
+      </div>
+      <span class="crit-badge ${badge}">${text}</span>
+    </div>`;
+  }
+  const tri = (pass, warn) => pass ? 'pass' : (warn ? 'warn' : 'fail');
+  const approach = R.T_bath - R.T_out;
+
   grid.innerHTML =
-    chip('Velocity (3–7 ft/s)',    v_pass,   `${R.V_fps.toFixed(2)} ft/s`) +
-    chip('Reynolds (≥ 10k)',       re_pass,  `${R.Re.toLocaleString('en-US',{maximumFractionDigits:0})}`) +
-    chip('ΔP (< 10 psi)',          dP_pass,  `${R.dP_psi.toFixed(2)} psi`) +
-    chip('Submergence margin',     sub_pass, `${R.net_submergence_in.toFixed(1)} in (≥ 0)`) +
-    chip('Radial clearance',       clear_pass, `${R.vessel_radial_clear.toFixed(2)} in (≥ ${I.clearance})`) +
-    chip('Pitch gap (≥ 0.5)',      pitch_pass, `${R.pitch_clearance.toFixed(2)} in`) +
-    chip('Approach to bath (≥ 2°)', approach_pass, `${(R.T_bath - R.T_out).toFixed(1)} °F`) +
-    (R.sizing_mode
-      ? chip(R.sizing_mode_duty ? 'Duty target (margin ≥ 10%)' : 'Outlet target',
-             duty_pass,
-             R.sizing_mode_duty
-               ? (isFinite(R.margin_duty) ? `${R.margin_duty.toFixed(1)}% margin` : '∞ area needed')
-               : `${R.margin_outlet >= 0 ? '+' : ''}${R.margin_outlet.toFixed(1)} °F`)
-      : chip('Service mode', true, 'Predict (no target)')
-    );
+    row('Recovered Duty',
+        R.sizing_mode_duty
+          ? `${R.Q.toLocaleString('en-US',{maximumFractionDigits:0})} Btu/hr (${R.Q_TR.toFixed(1)} TR) · target ${(I.target_duty_btuhr||0).toLocaleString('en-US',{maximumFractionDigits:0})} · ${isFinite(R.margin_duty)?R.margin_duty.toFixed(1)+'% margin':'∞ area needed'}`
+          : `${R.Q.toLocaleString('en-US',{maximumFractionDigits:0})} Btu/hr (${R.Q_TR.toFixed(1)} TR) recovered`,
+        R.sizing_mode_duty ? tri(R.margin_duty >= 10, R.margin_duty >= 0) : 'pass') +
+    row('Return Temp Usable',
+        `${R.T_out.toFixed(1)} °F out · ${approach.toFixed(1)} °F approach to bath (need ≥ 2 °F)`,
+        tri(approach >= 2, approach >= 1)) +
+    row('Coil-Side Velocity (liquid)',
+        `${R.V_fps.toFixed(2)} ft/s · need 3–7 ft/s`,
+        tri(R.V_fps >= 3 && R.V_fps <= 7, R.V_fps >= 2.5 && R.V_fps <= 7.5)) +
+    row('Flow Regime',
+        `Re ${R.Re.toLocaleString('en-US',{maximumFractionDigits:0})} · need ≥ 10,000 (turbulent)`,
+        tri(R.Re >= 10000, R.Re >= 4000)) +
+    row('Pressure Drop',
+        `${R.dP_psi.toFixed(2)} psi · need < 10 psi`,
+        tri(R.dP_psi < 10, R.dP_psi < 15)) +
+    row('Submergence',
+        R.f_sub >= 1 ? `${R.net_submergence_in.toFixed(1)} in over coil top · need ≥ 0 (after swell)`
+                     : `${(R.f_sub*100).toFixed(0)}% wetted · coil top above liquid`,
+        tri(R.net_submergence_in >= 0, R.net_submergence_in >= -2)) +
+    row('Radial Clearance',
+        `${R.vessel_radial_clear.toFixed(2)} in coil-to-wall · need ≥ ${I.clearance} in`,
+        tri(R.vessel_radial_clear >= I.clearance, R.vessel_radial_clear >= I.clearance - 0.5)) +
+    row('Pitch Gap',
+        `${R.pitch_clearance.toFixed(2)} in pipe-to-pipe · need ≥ 1.0 in`,
+        tri(R.pitch_clearance >= 1.0, R.pitch_clearance >= 0.5)) +
+    (I.winding_cls.length > 1 ? row('Inter-Winding Gap',
+        `${(6 - R.OD).toFixed(2)} in edge-to-edge · need ≥ 0.5 in`,
+        tri((6 - R.OD) >= 0.5, (6 - R.OD) >= 0)) : '') +
+    row('Coil Fits Shell',
+        `${R.coil_height_in.toFixed(1)} in tall · ${R.vessel_ss_in.toFixed(0)} in S/S available`,
+        tri(R.coil_height_in <= R.vessel_ss_in*0.95, R.coil_height_in <= R.vessel_ss_in));
 }
 
 
@@ -7090,6 +7515,137 @@ function hr_sizeToTarget(){
 }
 
 
+/* ─── 5.6 Heat Recovery — Force Compute + Optimize (parity) ──────────────
+   HR's deliverable is RECOVERED DUTY (Btu/hr). Size to Target sizes length to
+   a duty target at the current pipe/windings. Force Compute also searches pipe
+   size and winding count for the cheapest design that hits the duty target AND
+   passes every check. Optimize ignores the target and finds the design with the
+   MOST recovered duty that still passes — useful when the goal is "recover as
+   much as the loop can" rather than a specific number. Note the shell side here
+   is free convection (Churchill-Chu), which caps duty, so more length yields
+   diminishing returns; the search reflects that honestly.                 */
+
+const HR_PIPES = ['1.5_40','2_40','2.5_40','3_40','4_40'];
+const HR_WINDS = [1,2,3,4];
+
+function hr_geomOK(I, R){
+  const fails = [];
+  if (!(R.V_fps >= 3 && R.V_fps <= 7))            fails.push('velocity out of 3–7 ft/s');
+  if (!(R.Re >= 10000))                            fails.push('flow not turbulent');
+  if (!(R.dP_psi < 10))                            fails.push('ΔP ≥ 10 psi');
+  if (!(R.net_submergence_in >= 0))                fails.push('coil not submerged');
+  if (!(R.vessel_radial_clear >= I.clearance - 1e-6)) fails.push('radial clearance short');
+  if (!(R.pitch_clearance >= 0.5))                 fails.push('pitch gap < 0.5 in');
+  if (I.winding_cls.length > 1 && (6 - R.OD) < 0)  fails.push('windings interfere');
+  if (R.coil_height_in > R.vessel_ss_in)           fails.push('coil too tall for shell');
+  return { ok: fails.length === 0, fails };
+}
+
+function hr_makeI(baseI, { length, pipe_size, n_windings }){
+  const I = Object.assign({}, baseI);
+  if (length     != null) I.length     = length;
+  if (pipe_size  != null) I.pipe_size  = pipe_size;
+  if (n_windings != null) I.n_windings = n_windings;
+  let cls = computeWindingCLs(I.vessel_id, I.n_windings);
+  const od = PIPE[I.pipe_size].od;
+  const stdClear = (I.vessel_id - (cls[0] + od)) / 2;
+  if (stdClear < I.clearance - 1e-9){
+    const outerMax = Math.floor((I.vessel_id - 2*I.clearance - od) * 4) / 4;
+    if (outerMax - 6*(cls.length - 1) >= Math.max(6, 3*od)){
+      cls = cls.map((_, i) => outerMax - 6*i);
+    }
+  }
+  I.winding_cls   = cls;
+  I.coil_od       = cls[0];
+  I.coil_id_inner = cls.length >= 2 ? cls[cls.length-1] : cls[0];
+  return I;
+}
+
+function hr_showStatus(html, tone){
+  const b = $('hr-size-status');
+  if (!b) return;
+  b.style.display = 'block';
+  const c = tone === 'warn' ? '192,112,14' : tone === 'fail' ? '180,70,70' : '127,200,214';
+  b.style.borderColor = `rgba(${c},0.55)`;
+  b.style.background   = `rgba(${c},0.09)`;
+  b.innerHTML = html;
+}
+
+function hr_applyResult(best){
+  $('hr_length').value     = Math.round(best.length);
+  $('hr_pipe_size').value  = best.I.pipe_size;
+  $('hr_n_windings').value = String(best.I.n_windings);
+  hr_recompute();
+}
+
+// Smallest length (at a pipe/winding choice) that meets the duty target with
+// ≥10% margin and passes all checks. Returns {I,R,length,gate} or null.
+function hr_sizeLengthForDuty(baseI, pipe_size, n_windings){
+  const lengths = [60,80,100,120,140,160,180,200,220,250,280,320,360,400,450,500];
+  for (const L of lengths){
+    let R; const I = hr_makeI(baseI, { length: L, pipe_size, n_windings });
+    try { R = hr_compute(I); } catch(e){ continue; }
+    if (!isFinite(R.Q)) continue;
+    if (R.margin_duty >= 10){
+      const gate = hr_geomOK(I, R);
+      return { I, R, length: L, gate };
+    }
+  }
+  return null;
+}
+
+function hr_forceCompute(){
+  const baseI = hr_readInputs();
+  if (!(baseI.target_duty_btuhr > 0)){
+    hr_showStatus('<strong style="color:#c0700e">Force Compute needs a target.</strong> Enter a Target Duty (Btu/hr); Force Compute then searches pipe size and winding count for the cheapest coil that delivers it and passes every check.', 'warn');
+    return;
+  }
+  let cands = [];
+  for (const p of HR_PIPES){
+    for (const w of HR_WINDS){
+      const best = hr_sizeLengthForDuty(baseI, p, w);
+      if (best && best.gate.ok){
+        cands.push(Object.assign({ cost: best.length * PIPE[p].od }, best));
+      }
+    }
+  }
+  if (!cands.length){
+    hr_showStatus(`<strong style="color:#c0700e">No fully-passing design hits ${baseI.target_duty_btuhr.toLocaleString('en-US',{maximumFractionDigits:0})} Btu/hr.</strong> Across every pipe size and winding count, nothing both delivers the target duty and clears all checks. Because the shell side is free convection, duty is capped — try a lower target, or accept the closest design from Size to Target.`, 'fail');
+    return;
+  }
+  cands.sort((a,b) => a.cost - b.cost);
+  const win = cands[0];
+  hr_applyResult(win);
+  hr_showStatus(`<strong style="color:var(--frost-2)">Force Compute — cheapest passing design.</strong> ${Math.round(win.length)} ft of ${win.I.pipe_size.replace('_',' Sch ')} ${win.I.n_windings===1?'single':win.I.n_windings+'×'}-wound → ${win.R.Q.toLocaleString('en-US',{maximumFractionDigits:0})} Btu/hr (${win.R.Q_TR.toFixed(1)} TR), outlet ${win.R.T_out.toFixed(1)} °F, every check green. Searched ${cands.length} passing combination${cands.length>1?'s':''}.`, 'ok');
+}
+
+function hr_optimizeCoil(){
+  const baseI = hr_readInputs();
+  let best = null;
+  for (const p of HR_PIPES){
+    for (const w of HR_WINDS){
+      // longest passing length = most recovered duty for this pipe/winding
+      for (const L of [500,450,400,360,320,280,250,220,200,180,160,140,120,100,80,60]){
+        let R; const I = hr_makeI(baseI, { length: L, pipe_size: p, n_windings: w });
+        try { R = hr_compute(I); } catch(e){ continue; }
+        if (!isFinite(R.Q)) continue;
+        const g = hr_geomOK(I, R);
+        if (g.ok){
+          if (!best || R.Q > best.R.Q) best = { I, R, length: L, gate: g };
+          break;  // first (longest) passing for this combo
+        }
+      }
+    }
+  }
+  if (!best){
+    hr_showStatus('<strong style="color:#c0700e">No passing design found.</strong> Nothing fits submerged with all checks green in this vessel. Check vessel size, clearance, or fluid selection.', 'fail');
+    return;
+  }
+  hr_applyResult(best);
+  hr_showStatus(`<strong style="color:var(--frost-2)">Optimized for maximum recovery.</strong> ${Math.round(best.length)} ft of ${best.I.pipe_size.replace('_',' Sch ')} ${best.I.n_windings===1?'single':best.I.n_windings+'×'}-wound → ${best.R.Q.toLocaleString('en-US',{maximumFractionDigits:0})} Btu/hr (${best.R.Q_TR.toFixed(1)} TR), outlet ${best.R.T_out.toFixed(1)} °F, all checks green. This is the most this vessel will recover submerged.`, 'ok');
+}
+
+
 /* ───────────────────────────────────────────────────────────────────────
    Patch E3 · Heat Recovery inner-tab renderers + sweep + PDF
    ─────────────────────────────────────────────────────────────────────── */
@@ -7098,6 +7654,12 @@ function hr_renderGeometry(I, R){
   const TOPO_NAME = {1:'Single-Wound', 2:'Double-Wound', 3:'Triple-Wound', 4:'Quadruple-Wound', 6:'Six-Wound'};
   const topoName = TOPO_NAME[I.n_windings] || `${I.n_windings}-Wound`;
   const headerNote = I.header ? ` with ${I.header}″ manifold header` : '';
+
+  // Construction views — shared builders, ink theme for the app.
+  const frontEl = $('hr-front-svg');
+  if (frontEl) setSvgContent(frontEl, buildFrontViewSVG(I, R, 'ink', 'hrFvApp'));
+  const planEl = $('hr-plan-svg');
+  if (planEl) setSvgContent(planEl, buildPlanViewSVG(I, R, 'ink', 'hrPvApp'));
 
   const cls = (I.winding_cls && I.winding_cls.length) ? I.winding_cls : [I.coil_od];
   const arc_per_winding_ft = cls.map(d => Math.PI * d / 12);
@@ -7499,7 +8061,14 @@ Check: U·A·LMTD = ${R.U_o.toFixed(1)}×${R.A_o.toFixed(1)}×${R.LMTD.toFixed(2
   ${R.sizing_mode_outlet ? `<div class="verdict ${R.margin_outlet>=0 ? 'pass' : 'fail'}"><div class="name">Outlet Margin</div><div class="text">${R.margin_outlet >= 0 ? '+' : ''}${R.margin_outlet.toFixed(1)} °F</div></div>` : ''}
 </div>
 
-<h2><span class="num">06</span>Methodology &amp; Scope</h2>
+<h2><span class="num">06</span>Construction Views</h2>
+<div style="display:flex;gap:14px;align-items:flex-start;margin-top:6px">
+  <div style="flex:1.38;min-width:0">${buildFrontViewSVG(I, R, 'paper', 'hrPdfFv')}</div>
+  <div style="flex:1;min-width:0">${buildPlanViewSVG(I, R, 'paper', 'hrPdfPv')}</div>
+</div>
+<div class="reasoning" style="margin-top:8px">Construction views, as sized — front elevation (coil in vessel, liquid level &amp; submergence shown) and plan view (winding centerlines &amp; radial clearance). Verify all dimensions against fabrication drawings before release.</div>
+
+<h2><span class="num">07</span>Methodology &amp; Scope</h2>
 <div class="note">
   <strong style="font-style:normal;color:#3a2e15">Modeled:</strong> Steady-state NTU-effectiveness with the boiling NH₃ pool at constant saturation T (no shell-side T glide); Dittus-Boelter tube side (n = 0.4 for heating) with Schmidt helical correction; Churchill-Chu natural convection on the shell side with iteratively-converged outer-wall T; partial-submergence area-weighting (submerged + vapor-side exposed); Ito helical pressure drop; water / 30% glycol / 50% glycol property tables fit to ASHRAE.
   <br><br>
@@ -7768,6 +8337,29 @@ if (inP) inP.addEventListener('input', recompute);
   const calcBtn = $('bo-calc');
   if (calcBtn) calcBtn.addEventListener('click', boilout_recompute);
 
+  // Size to Target / Force Compute / Optimize Coil (parity with subcooler)
+  const sizeBtn = $('bo-size-target');
+  if (sizeBtn) sizeBtn.addEventListener('click', boilout_sizeToTarget);
+  const forceBtn = $('bo-force');
+  if (forceBtn) forceBtn.addEventListener('click', boilout_forceCompute);
+  const optBtn = $('bo-optimize');
+  if (optBtn) optBtn.addEventListener('click', boilout_optimizeCoil);
+
+  // Enable Size to Target only when a target cycle time is entered
+  (function boWireSizeGate(){
+    const tf = $('bo_target_cycle'), btn = $('bo-size-target');
+    if (!tf || !btn) return;
+    const refresh = () => {
+      const v = tf.value.trim();
+      const empty = (v === '' || isNaN(+v) || +v <= 0);
+      btn.disabled = empty;
+      btn.title = empty ? 'Enter a target cycle time to size to it.'
+                        : 'Size coil length so the cycle hits the target time (pipe + windings locked).';
+    };
+    tf.addEventListener('input', refresh);
+    refresh();
+  })();
+
   // Reset button — reapply the currently-selected preset
   const resetBtn = $('bo-reset');
   if (resetBtn) resetBtn.addEventListener('click', () => boilout_applyPreset(presetSel.value));
@@ -7849,6 +8441,12 @@ if (inP) inP.addEventListener('input', recompute);
   // Size to Target button
   const sizeBtn = $('hr-size-target');
   if (sizeBtn) sizeBtn.addEventListener('click', hr_sizeToTarget);
+
+  // Force Compute + Optimize Coil (parity with subcooler / boil-out)
+  const forceBtn = $('hr-force');
+  if (forceBtn) forceBtn.addEventListener('click', hr_forceCompute);
+  const optBtn = $('hr-optimize');
+  if (optBtn) optBtn.addEventListener('click', hr_optimizeCoil);
 
   // Reset button
   const resetBtn = $('hr-reset');
