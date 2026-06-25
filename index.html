@@ -1023,9 +1023,6 @@ footer .seal svg{width: 22px; height: 22px}
             <button class="btn" id="pdf">
               <span class="ico">▤</span>PDF Report
             </button>
-            <button class="btn ghost" id="export">
-              <span class="ico">↓</span>Export TXT
-            </button>
             <button class="btn ghost" id="reset">
               <span class="ico">○</span>Reset
             </button>
@@ -2431,6 +2428,7 @@ function headDepth(vessel_id){
 // clearance) is unchanged, and self-clears otherwise — so a manual edit can
 // never be silently computed on stale geometry.
 let WINDING_CL_OVERRIDE = null;
+let WINDING_CL_AUTO_TIGHTENED = false;
 
 function computeWindingCLs(vessel_id, n_windings){
   const cls = [];
@@ -3427,7 +3425,7 @@ function compute(I){
     liquid_level_in, liquid_column_total_in,
     submergence_in, net_submergence_in, swell_allowance,
     coil_bottom_offset_in, coil_top_in,
-    coil_radial_gap, pitch_clearance,
+    coil_radial_gap, pitch_clearance, interwinding_gap_in: 6 - OD,
     R: {R_i_only, R_fi_only, R_wall_only, R_fo_only, R_o_only, R_tot},
     pipe, OD, ID, D_mean,
     flux_util, q_practical_limit, chf_util, q_chf,
@@ -3480,6 +3478,25 @@ function readInputs(){
       cls = o.cls;
     } else {
       WINDING_CL_OVERRIDE = null;   // context changed — revert to standard rule
+    }
+  }
+  // Clearance-aware winding (performance mode parity with Size-to-Target):
+  // the standard rule fixes the outer C/L at vessel_id-6, which pins radial
+  // clearance at 3 - OD/2 regardless of the requirement (0.75 in for 4" pipe).
+  // If that violates the user's Min Radial Clearance, wind the outer C/L in
+  // from the clearance itself and step the rest down by 6, rounding to 1/4".
+  if (!WINDING_CL_OVERRIDE && cls.length >= 1){
+    const od = PIPE[$('pipe_size').value].od;
+    const reqClear = +$('clearance').value;
+    const stdClear = (vessel_id - (cls[0] + od)) / 2;
+    if (stdClear < reqClear - 1e-9){
+      const outerMax = Math.floor((vessel_id - 2*reqClear - od) * 4) / 4;
+      if (outerMax - 6*(cls.length - 1) >= Math.max(6, 3*od)){
+        cls = cls.map((_, i) => outerMax - 6*i);
+        WINDING_CL_AUTO_TIGHTENED = true;
+      }
+    } else {
+      WINDING_CL_AUTO_TIGHTENED = false;
     }
   }
   // Outer / inner used by downstream geometry math
@@ -4391,7 +4408,9 @@ ${(() => {
     (R.flux_util >= 100),
     (R.vessel_radial_clear < I.clearance),
     (I.shell_mode !== 'dry_vapor' && R.net_submergence_in < 0),
-    (R.coil_height_in > R.vessel_ss_in)
+    (R.coil_height_in > R.vessel_ss_in),
+    (R.pitch_clearance < 0.5),
+    (I.winding_cls.length > 1 && R.interwinding_gap_in < 0.5)
   ].filter(Boolean).length;
   return nFail > 0 ? `<div style="margin:12px 0 0;padding:10px 14px;background:#fdeaea;border:2px solid #b3261e;color:#b3261e;font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.14em;text-transform:uppercase;font-weight:700">⚠ Not for issue — ${nFail} design ${nFail > 1 ? 'criteria fail' : 'criterion fails'} (see §08). Resolve before sending.</div>` : '';
 })()}
@@ -4483,7 +4502,7 @@ ${I.shell_mode === 'dry_vapor' ? `<div class="reasoning" style="background:#fff3
   <div style="flex:1.38;min-width:0">${buildFrontViewSVG(I, R, 'paper', 'pdfFv')}</div>
   <div style="flex:1;min-width:0">${buildPlanViewSVG(I, R, 'paper', 'pdfPv')}</div>
 </div>
-<div class="reasoning" style="margin-top:0">Construction views, as sized — front elevation (coil in vessel, liquid level &amp; submergence shown) and plan view (winding centerlines &amp; radial clearance). Verify all dimensions against fabrication drawings before release.</div>
+<div class="reasoning" style="margin-top:0">Construction views, as sized — front elevation (coil in vessel, liquid level &amp; submergence shown) and plan view (winding centerlines &amp; radial clearance).${WINDING_CL_AUTO_TIGHTENED ? ' Outer winding C/L tightened from the standard rule to honor the '+I.clearance.toFixed(2)+'″ radial-clearance requirement.' : ''} Verify all dimensions against fabrication drawings before release.</div>
 
 <h2><span class="num">08</span>Design Criteria · Verdict</h2>
 <div class="verdict-grid">
@@ -4497,6 +4516,8 @@ ${I.shell_mode === 'dry_vapor' ? `<div class="reasoning" style="background:#fff3
   <div class="verdict ${R.vessel_radial_clear>=I.clearance?'pass':'fail'}"><div class="name">Clearance</div><div class="text">${R.vessel_radial_clear.toFixed(2)} in</div></div>
   <div class="verdict ${I.shell_mode==='dry_vapor'?'info':R.net_submergence_in>=4?'pass':R.net_submergence_in>=0?'warn':'fail'}"><div class="name">Submergence</div><div class="text">${I.shell_mode==='dry_vapor'?'Dry · N/A':R.net_submergence_in.toFixed(1)+' in'}</div></div>
   <div class="verdict ${R.coil_height_in <= R.vessel_ss_in*0.95 ? 'pass' : R.coil_height_in <= R.vessel_ss_in ? 'warn' : 'fail'}"><div class="name">Coil Fits Shell</div><div class="text">${R.coil_height_in.toFixed(1)} / ${R.vessel_ss_in.toFixed(0)} in</div></div>
+  ${I.winding_cls.length > 1 ? `<div class="verdict ${R.interwinding_gap_in >= 0.5 ? 'pass' : R.interwinding_gap_in >= 0 ? 'warn' : 'fail'}"><div class="name">Inter-Winding Gap</div><div class="text">${R.interwinding_gap_in.toFixed(2)} in</div></div>` : ''}
+  <div class="verdict ${R.pitch_clearance >= 1.0 ? 'pass' : R.pitch_clearance >= 0.5 ? 'warn' : 'fail'}"><div class="name">Pitch Gap</div><div class="text">${R.pitch_clearance.toFixed(2)} in</div></div>
 </div>
 
 <div class="note"><b style="color:#3a2e15">Methodology:</b> Tube-side h<sub>i</sub> via Dittus-Boelter + ${I.helical_corr} helical correction, Sieder-Tate viscosity correction ${I.visc_corr}. Shell-side h<sub>o</sub> via ${I.shell_mode === 'pool_boil' ? 'pool-boiling NH₃ correlation calibrated to three industrial reference designs (±0.3 °F)' : I.shell_mode === 'forced_annular' ? 'Patil/Shende/Ghosh 1982 annular flow correlation' : I.shell_mode === 'dry_vapor' ? 'Churchill-Chu free convection to saturated NH₃ vapor (coil treated as fully exposed / non-submerged)' : 'free-convection estimate'}. Pressure drop via Ito helical-turbulent. NH₃ properties from polynomial fits to ASHRAE 2017 tables, &lt;1% error. Validity: bath −25 °F to +50 °F; HP liquid 50 °F to 110 °F.</div>
@@ -7669,6 +7690,23 @@ if (inP) inP.addEventListener('input', recompute);
 (function wireSizerInputs(){
   const calcBtn = $('calc');
   if (calcBtn) calcBtn.addEventListener('click', recompute);
+
+  // Reset — restore every sizer input to its default value attribute, clear any
+  // solver C/L override, then recompute so the sheet reflects the clean defaults.
+  const resetBtn = $('reset');
+  if (resetBtn) resetBtn.addEventListener('click', () => {
+    const ids = ['vessel_id','vessel_ss','coil_height_approx','liquid_level','mass_flow',
+                 'bath_temp','inlet_temp','target_outlet','inlet_pressure','pitch','clearance'];
+    ids.forEach(id => { const el = $(id); if (el) el.value = el.getAttribute('value') ?? ''; });
+    ['pipe_size','n_windings','header','fouling','shell_mode'].forEach(id => {
+      const el = $(id); if (!el) return;
+      const def = el.querySelector('option[selected]');
+      el.value = def ? def.value : el.options[0].value;
+    });
+    WINDING_CL_OVERRIDE = null;
+    WINDING_CL_AUTO_TIGHTENED = false;
+    recompute();
+  });
 
   // inlet_pressure is intentionally omitted (already wired above);
   // probe_temp / probe_q are probe-only controls wired separately.
