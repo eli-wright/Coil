@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>HELIX — Ammonia Coil Engineering Atelier</title>
+<title>HELIX — Refrigerant Coil Engineering Atelier</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&family=JetBrains+Mono:wght@300;400;500;600;700&family=Fraunces:opsz,wght@9..144,300;9..144,400;9..144,500;9..144,600;9..144,700&display=swap" rel="stylesheet">
@@ -187,6 +187,57 @@ body::before{
 }
 .service-panel{display: none;}
 .service-panel.active{display: block;}
+
+/* ---------- REFRIGERANT BAR (global working-fluid selector) ---------- */
+.refrigerant-bar{
+  position: relative; z-index: 2;
+  display: flex; align-items: center; flex-wrap: wrap;
+  gap: clamp(10px, 2vw, 24px);
+  padding: 10px clamp(24px, 5vw, 80px);
+  border-bottom: 1px solid var(--line);
+  background: linear-gradient(180deg, rgba(204,168,99,0.03) 0%, rgba(7,9,13,0) 100%);
+}
+.refrigerant-bar .services-label{
+  display: flex; align-items: center;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px; letter-spacing: .22em; text-transform: uppercase;
+  color: var(--brass-3);
+  padding-right: clamp(8px, 2vw, 22px);
+  border-right: 1px solid var(--line);
+}
+.refrigerant-bar select{
+  background: rgba(12,17,24,0.85); color: var(--brass-2);
+  border: 1px solid var(--line); border-radius: 2px;
+  font-family: 'JetBrains Mono', monospace; font-size: 12px;
+  letter-spacing: .06em; padding: 7px 10px; cursor: pointer;
+  min-width: 200px;
+}
+.refrigerant-bar select:disabled{opacity:.55; cursor: wait;}
+.refrigerant-bar select:focus{outline: none; border-color: var(--brass-3);}
+.ref-badge{
+  font-family: 'JetBrains Mono', monospace; font-size: 10px;
+  letter-spacing: .1em; color: var(--mute);
+  border: 1px solid var(--line); border-radius: 2px;
+  padding: 5px 9px; white-space: nowrap;
+}
+.ref-engine{color: var(--brass-3);}
+.ref-engine.engine-fallback{color: #d97757; border-color: rgba(217,119,87,.4);}
+
+/* Out-of-range property warning banner (one per service panel) */
+.prop-warnings{
+  position: relative; z-index: 2;
+  margin: 18px clamp(24px, 5vw, 80px) 0;
+  border: 1px solid rgba(217,119,87,.45); border-radius: 2px;
+  background: rgba(217,119,87,.07);
+  padding: 12px 16px;
+  font-size: 12.5px; line-height: 1.55; color: var(--paper-2);
+}
+.prop-warnings .pw-head{
+  font-family: 'JetBrains Mono', monospace; font-size: 10px;
+  letter-spacing: .18em; text-transform: uppercase;
+  color: #d97757; margin-bottom: 6px;
+}
+.prop-warnings .pw-item{margin-top: 3px;}
 
 /* ---------- COMING-SOON PANELS ---------- */
 .soon-shell{
@@ -743,7 +794,7 @@ footer .seal svg{width: 22px; height: 22px}
       <div class="word">H<span class="gold">ELI</span>X</div>
     </div>
     <div class="tagline">
-      An engineering atelier for the sizing &amp; verification of helical-spiral ammonia coils inside accumulators &amp; intercoolers.
+      An engineering atelier for the sizing &amp; verification of helical-spiral refrigerant coils inside accumulators &amp; intercoolers.
     </div>
     <div class="meta-stamp">
       Edition &nbsp;·&nbsp; MMXXVI<br>
@@ -764,7 +815,7 @@ footer .seal svg{width: 22px; height: 22px}
       </svg>
     </div>
     <div class="coil-caption">
-      <span class="cap-fixed">R-717 · Double-Wound</span>
+      <span class="cap-fixed" id="coil-cap-ref">R-717 · Double-Wound</span>
       <span class="cap-wipe" data-text="Hold the glowing inlet — run the cold flow">Hold the glowing inlet — run the cold flow</span>
     </div>
   </div>
@@ -772,10 +823,10 @@ footer .seal svg{width: 22px; height: 22px}
   <h1 class="clipwipe"><span class="cw-base">Sized <em>with intent</em>, <br>verified <span class="amp">&amp;</span> understood.</span><span class="cw-over" aria-hidden="true">Sized <em>with intent</em>, <br>verified <span class="amp">&amp;</span> understood.</span></h1>
 
   <div class="hero-sub">
-    <span>R-717 Native</span>
-    <span>3-Case Calibrated</span>
-    <span>±0.2°F Validated</span>
-    <span>IIAR-Aware</span>
+    <span id="hero-ref-chip">R-717 Native</span>
+    <span>CoolProp-Backed</span>
+    <span>3-Case Calibrated · R-717</span>
+    <span>IIAR / ASHRAE 15 Aware</span>
   </div>
 </header>
 
@@ -793,8 +844,29 @@ footer .seal svg{width: 22px; height: 22px}
   </button>
 </nav>
 
+<!-- ============ REFRIGERANT BAR — global working-fluid selector ============ -->
+<div class="refrigerant-bar">
+  <div class="services-label">Refrigerant</div>
+  <select id="refrigerant" disabled title="Working fluid for all thermodynamic calculations (loading property engine…)">
+    <option value="R717" selected>R-717 · Ammonia</option>
+    <option value="R134A">R-134a · HFC-134a</option>
+    <option value="R22">R-22 · HCFC-22</option>
+    <option value="R404A">R-404A · HFC blend</option>
+    <option value="R407C">R-407C · HFC blend</option>
+    <option value="R410A">R-410A · HFC blend</option>
+    <option value="R507A">R-507A · HFC azeotrope</option>
+    <option value="R744">R-744 · CO₂</option>
+    <option value="R290">R-290 · Propane</option>
+    <option value="R1234YF">R-1234yf · HFO-1234yf</option>
+  </select>
+  <span class="ref-badge" id="ref-meta">T_crit 270.3 °F · P_crit 1644 psia · B2L</span>
+  <span class="ref-badge ref-engine" id="ref-engine">Property engine · loading…</span>
+</div>
+
 <!-- ============ SERVICE PANEL: SUBCOOLER (active) ============ -->
 <div class="service-panel active" id="panel-subcooler" role="tabpanel" aria-labelledby="tab-subcooler">
+
+<div class="prop-warnings" id="prop-warnings-subcooler" style="display:none"></div>
 
 <!-- ============ MAIN SHELL ============ -->
 <div class="shell">
@@ -805,7 +877,7 @@ footer .seal svg{width: 22px; height: 22px}
     <div class="toolbar">
       <button class="tool-btn active" data-tab="sizer"><span class="idx">I</span>Coil Sizer</button>
       <button class="tool-btn" data-tab="geometry"><span class="idx">II</span>Geometry</button>
-      <button class="tool-btn" data-tab="properties"><span class="idx">III</span>NH₃ Props</button>
+      <button class="tool-btn" data-tab="properties"><span class="idx">III</span><span class="props-tab-label">R-717 Props</span></button>
       <button class="tool-btn" data-tab="sweep"><span class="idx">IV</span>Sweep</button>
       <button class="tool-btn" data-tab="notes"><span class="idx">V</span>Field Notes</button>
     </div>
@@ -992,7 +1064,7 @@ footer .seal svg{width: 22px; height: 22px}
               <div class="field-label">Fouling Std.
                 <button class="help-btn" data-help="fouling">?</button></div>
               <select id="fouling">
-                <option value="0.00025" selected>Industrial NH₃ (0.00025) · default — matches reference designs</option>
+                <option value="0.00025" selected>Industrial refrigerant (0.00025) · default — matches R-717 reference designs</option>
                 <option value="0.0005">TEMA Clean (0.0005) · conservative</option>
                 <option value="0.001">Service-aged (0.001)</option>
                 <option value="0.002">Oil-fouled (0.002)</option>
@@ -1007,7 +1079,7 @@ footer .seal svg{width: 22px; height: 22px}
               <div class="field-label">Shell-Side Mode
                 <button class="help-btn" data-help="shell_mode">?</button></div>
               <select id="shell_mode">
-                <option value="pool_boil" selected>Pool-Boiling NH₃ (default)</option>
+                <option value="pool_boil" selected>Pool-Boiling R-717 (default)</option>
                 <option value="static_bath">Static Liquid Bath (free convection)</option>
                 <option value="forced_annular">Forced Annular Flow (Patil)</option>
                 <option value="dry_vapor">Dry / Vapor — Non-Submerged (free convection)</option>
@@ -1124,12 +1196,12 @@ footer .seal svg{width: 22px; height: 22px}
         <span class="card-corner tl"></span><span class="card-corner tr"></span>
         <span class="card-corner bl"></span><span class="card-corner br"></span>
         <div class="card-head">
-          <h2><em>iii.</em>&nbsp; Ammonia Properties · R-717</h2>
+          <h2><em>iii.</em>&nbsp; <span id="props-head-sub">Ammonia Properties · R-717</span></h2>
           <span class="ord">Reference · 03</span>
         </div>
         <div class="card-body">
           <p style="font-family:'Cormorant Garamond',serif;font-style:italic;font-size:17px;color:var(--paper-2);margin-bottom:18px">
-            Saturated &amp; subcooled liquid ammonia properties at the temperatures present in this design. Used directly in the heat-transfer calculation.
+            Saturated &amp; subcooled liquid refrigerant properties at the temperatures present in this design. Used directly in the heat-transfer calculation.
           </p>
           <div class="form-row">
             <div class="field">
@@ -1245,15 +1317,15 @@ footer .seal svg{width: 22px; height: 22px}
           <div class="prop-card">
             <h4>Pipe material specification</h4>
             <div style="font-family:'Cormorant Garamond',serif;font-size:16px;line-height:1.55;color:var(--paper-2)">
-              For bath temperatures down to <strong>−20 °F</strong>: ASTM A106 Gr. B carbon steel meets ASME B31.5 toughness requirements. Below <strong>−20 °F</strong>: switch to <strong>A333 Gr. 6</strong> (low-temperature carbon steel) and specify Charpy impact testing per code. All welds NDT to 100 % per IIAR 2.
+              For bath temperatures down to <strong>−20 °F</strong>: ASTM A106 Gr. B carbon steel meets ASME B31.5 toughness requirements. Below <strong>−20 °F</strong>: switch to <strong>A333 Gr. 6</strong> (low-temperature carbon steel) and specify Charpy impact testing per code. All welds NDT to 100 % per IIAR 2 (R-717) or ASHRAE 15 / ASME B31.5 practice for other refrigerants.
             </div>
           </div>
           <div class="prop-card">
             <h4>Pressure rating</h4>
             <div style="font-family:'Cormorant Garamond',serif;font-size:16px;line-height:1.55;color:var(--paper-2)">
-              HP liquid lines see condensing pressure — design for MAWP at least equal to your system's high-side relief setting, typically <strong>≥ 250 psig</strong> for ammonia condensing service. Standard carbon-steel Sch 40/80 piping carries generous pressure capacity at HP-liquid temperatures, but the actual rating depends on material grade, joint design, temperature, corrosion allowance, and the applicable piping code.
+              HP liquid lines see condensing pressure — design for MAWP at least equal to your system's high-side relief setting; <span id="mawp-note">typically <strong>≥ 250 psig</strong> for ammonia condensing service.</span> Standard carbon-steel Sch 40/80 piping carries generous pressure capacity at HP-liquid temperatures, but the actual rating depends on material grade, joint design, temperature, corrosion allowance, and the applicable piping code.
               <p style="margin-top:10px;font-style:italic;color:var(--mute);font-size:14px">
-                Verify pipe MAWP separately per <strong>ASME B31.5</strong> (refrigeration piping) and any applicable jurisdictional requirements (IIAR 2, local AHJ). HELIX does not compute or certify pipe pressure rating.
+                Verify pipe MAWP separately per <strong>ASME B31.5</strong> (refrigeration piping) and any applicable jurisdictional requirements (IIAR 2 for R-717, ASHRAE 15 for halocarbon/CO₂/hydrocarbon systems, local AHJ). HELIX does not compute or certify pipe pressure rating.
               </p>
             </div>
           </div>
@@ -1288,11 +1360,11 @@ footer .seal svg{width: 22px; height: 22px}
           <div class="prop-card">
             <h4>What HELIX models — and what it does not</h4>
             <div style="font-family:'Cormorant Garamond',serif;font-size:16px;line-height:1.55;color:var(--paper-2)">
-              <strong>Modeled:</strong> Steady-state heat transfer; Dittus-Boelter tube side with selectable Schmidt or Kern helical correction and optional Sieder-Tate viscosity correction; shell-side mode-selectable between (a) T-dependent pool-boiling correlation calibrated to three industrial reference designs, (b) static-bath conservative h<sub>o</sub>, and (c) Patil/Shende/Ghosh 1982 forced annular flow; Ito helical pressure drop; geometric clearance; IIAR velocity check; ASHRAE-grade NH₃ properties; basic water/glycol/brine property tables for non-NH₃ services.
+              <strong>Modeled:</strong> Steady-state heat transfer; Dittus-Boelter tube side with selectable Schmidt or Kern helical correction and optional Sieder-Tate viscosity correction; shell-side mode-selectable between (a) T-dependent pool-boiling correlation calibrated to three industrial R-717 reference designs (Mostinski reduced-pressure scaling for other refrigerants), (b) static-bath conservative h<sub>o</sub>, and (c) Patil/Shende/Ghosh 1982 forced annular flow; Ito helical pressure drop; geometric clearance; 3–7 ft/s liquid velocity check; CoolProp (Helmholtz-EOS) refrigerant properties for all ten selectable fluids; basic water/glycol/brine property tables for secondary-fluid services.
               <br><br>
-              <strong>Not modeled:</strong> Two-phase ammonia in the coil (assumes always single-phase liquid), partial submergence, oil migration dynamics, vibration analysis, support-bar effects on envelope, transient warm-up, non-condensables in the bath, coil-to-vessel weld stress.
+              <strong>Not modeled:</strong> Two-phase refrigerant in the coil (assumes always single-phase liquid), partial submergence, oil migration dynamics, vibration analysis, support-bar effects on envelope, transient warm-up, non-condensables in the bath, coil-to-vessel weld stress.
               <br><br>
-              <strong>Confidence band:</strong> Reproduces three independent industrial reference calculations within <span style="color:var(--brass-2)">±0.2 °F</span> outlet temperature. In the field, expect <span style="color:var(--brass-2)">±5 °F</span> uncertainty due to fouling, oil, and instrument accuracy.
+              <strong>Confidence band:</strong> Reproduces three independent industrial R-717 reference calculations within <span style="color:var(--brass-2)">±0.2 °F</span> outlet temperature; for other refrigerants the shell-side correlation is a scaled estimate without field calibration. In the field, expect <span style="color:var(--brass-2)">±5 °F</span> uncertainty due to fouling, oil, and instrument accuracy.
             </div>
           </div>
         </div>
@@ -1398,6 +1470,8 @@ footer .seal svg{width: 22px; height: 22px}
 <!-- ============ SERVICE PANEL: BOIL-OUT ============ -->
 <div class="service-panel" id="panel-boilout" role="tabpanel" aria-labelledby="tab-boilout">
 
+<div class="prop-warnings" id="prop-warnings-boilout" style="display:none"></div>
+
 <div class="shell">
 
   <!-- ===== LEFT: INPUT COLUMN with inner-tab toolbar ===== -->
@@ -1406,7 +1480,7 @@ footer .seal svg{width: 22px; height: 22px}
     <div class="toolbar">
       <button class="tool-btn active" data-tab="bo-sizer"><span class="idx">I</span>Sizer</button>
       <button class="tool-btn" data-tab="bo-geometry"><span class="idx">II</span>Geometry</button>
-      <button class="tool-btn" data-tab="bo-properties"><span class="idx">III</span>NH₃ Props</button>
+      <button class="tool-btn" data-tab="bo-properties"><span class="idx">III</span><span class="props-tab-label">R-717 Props</span></button>
       <button class="tool-btn" data-tab="bo-sweep"><span class="idx">IV</span>Sweep</button>
       <button class="tool-btn" data-tab="bo-notes"><span class="idx">V</span>Field Notes</button>
     </div>
@@ -1649,12 +1723,12 @@ footer .seal svg{width: 22px; height: 22px}
         <span class="card-corner tl"></span><span class="card-corner tr"></span>
         <span class="card-corner bl"></span><span class="card-corner br"></span>
         <div class="card-head">
-          <h2><em>iii.</em>&nbsp; Ammonia Properties · R-717</h2>
+          <h2><em>iii.</em>&nbsp; <span id="bo-props-head">Ammonia Properties · R-717</span></h2>
           <span class="ord">Reference · 03</span>
         </div>
         <div class="card-body">
           <p style="font-family:'Cormorant Garamond',serif;font-style:italic;font-size:17px;color:var(--paper-2);margin-bottom:18px">
-            Saturated &amp; superheated ammonia properties at the bath temperature and heating-fluid temperatures present in this boil-out cycle.
+            Saturated &amp; superheated refrigerant properties at the bath temperature and heating-fluid temperatures present in this boil-out cycle.
           </p>
           <div class="form-row">
             <div class="field">
@@ -1747,7 +1821,7 @@ footer .seal svg{width: 22px; height: 22px}
             <h4>What the three presets cover</h4>
             <div style="font-family:'Cormorant Garamond',serif;font-size:16px;line-height:1.55;color:var(--paper-2)">
               <ul style="margin:8px 0 0 22px">
-                <li><strong>Oil Boil-out</strong> — periodic warm-up (20–120 min) to ~+35 to +55 °F to vaporize entrained NH<sub>3</sub> so the carried compressor oil drops to a separator. Coil valved off most of the time.</li>
+                <li><strong>Oil Boil-out</strong> — periodic warm-up (20–120 min) to ~+35 to +55 °F to vaporize entrained refrigerant so the carried compressor oil drops to a separator. Coil valved off most of the time.</li>
                 <li><strong>Defrost / Bath Warm-up</strong> — quick heat injection (10–60 min) to thaw adjacent equipment. Heating fluid is usually hot discharge gas.</li>
                 <li><strong>Pull-down Pre-warm</strong> — longer cycle (30–180 min) to warm a cold vessel before pump-down so internal moisture doesn't freeze on the shell during evacuation.</li>
               </ul>
@@ -1756,21 +1830,21 @@ footer .seal svg{width: 22px; height: 22px}
           <div class="prop-card">
             <h4>Calibration limits</h4>
             <div style="font-family:'Cormorant Garamond',serif;font-size:16px;line-height:1.55;color:var(--paper-2)">
-              The shell-side pool-boiling correlation is calibrated for bath T = <strong>−25 to +30 °F</strong>. Boil-out cycles routinely warm the bath above +30 °F, putting part of the cycle outside the calibrated range. HELIX flags this with the orange calibration banner on the Sizer tab. Confidence: moderate. Recommended: validate the first installation against measured cycle time before relying on this tool for production sizing.
+              The shell-side pool-boiling correlation is calibrated for R-717 at bath T = <strong>−25 to +30 °F</strong> (other refrigerants use a Mostinski reduced-pressure scaling of that base). Boil-out cycles routinely warm the bath above +30 °F, putting part of the cycle outside the calibrated range. HELIX flags this with the orange calibration banner on the Sizer tab. Confidence: moderate. Recommended: validate the first installation against measured cycle time before relying on this tool for production sizing.
             </div>
           </div>
 
           <div class="divider"><span class="orn"></span><span class="label">Heating fluid physics</span><span class="line"></span></div>
           <div class="prop-card">
-            <h4>HP Liquid NH<sub>3</sub> mode</h4>
+            <h4>HP Liquid <span class="ref-name">R-717</span> mode</h4>
             <div style="font-family:'Cormorant Garamond',serif;font-size:16px;line-height:1.55;color:var(--paper-2)">
-              Warm HP liquid from the receiver (~+85 °F). Tube-side h<sub>i</sub> via Dittus-Boelter (n=0.3, cooling) + Schmidt helical correction. Liquid is dense and high-cp, so a modest mass flow delivers high duty. <strong>Velocity guideline: 3–7 ft/s</strong> (IIAR liquid range).
+              Warm HP liquid from the receiver (condensing temperature, typically +85…+95 °F). Tube-side h<sub>i</sub> via Dittus-Boelter (n=0.3, cooling) + Schmidt helical correction. Liquid is dense and high-cp, so a modest mass flow delivers high duty. <strong>Velocity guideline: 3–7 ft/s</strong> (industry liquid-line range; IIAR for R-717).
             </div>
           </div>
           <div class="prop-card">
-            <h4>Hot Gas NH<sub>3</sub> mode</h4>
+            <h4>Hot Gas <span class="ref-name">R-717</span> mode</h4>
             <div style="font-family:'Cormorant Garamond',serif;font-size:16px;line-height:1.55;color:var(--paper-2)">
-              Hot discharge gas (~+170 to +200 °F, ~150–200 psig). Tube-side modeled as <strong>single-phase superheated vapor</strong> at the inlet T. <strong>Velocity guideline: 15–80 ft/s</strong> (gas range).
+              Hot compressor discharge gas at the fluid's typical high-side pressure (dew pressure at 95 °F condensing; ~170 psia for R-717, far higher for R-410A / R-744). Tube-side modeled as <strong>single-phase superheated vapor</strong> at the inlet T. <strong>Velocity guideline: 15–80 ft/s</strong> (gas range).
               <p style="margin-top:10px;padding:10px 12px;background:rgba(204,168,99,0.08);border-left:3px solid var(--brass);font-style:italic;color:var(--paper-2);font-size:14px;line-height:1.5">
                 <strong style="font-style:normal;color:var(--brass-2)">Conservative approximation.</strong> Real hot-gas defrost involves <em>condensation</em> on the inner wall as the gas cools below saturation at line pressure. Condensing h<sub>i</sub> is 5–10× higher than single-phase vapor convection. Actual cycle times in the field will be <strong>30–50% faster</strong> than HELIX predicts. Predictions are safe for sizing (you'll never under-design); they are biased pessimistic.
               </p>
@@ -1793,7 +1867,7 @@ footer .seal svg{width: 22px; height: 22px}
           <div class="prop-card">
             <h4>System absorption</h4>
             <div style="font-family:'Cormorant Garamond',serif;font-size:16px;line-height:1.55;color:var(--paper-2)">
-              The heat injected during a boil-out cycle generates <strong>vapor in the bath</strong> that the compressors must absorb. Peak vapor generation is ~Q<sub>peak</sub> / h<sub>fg</sub>. For a 60-TR peak duty on a +30 °F bath (h<sub>fg</sub> ≈ 543 Btu/lb), that's ~22 lb/min of additional vapor — typically a manageable transient if the compressors have headroom, but it should be checked against system capacity, especially in high-utilization plants.
+              The heat injected during a boil-out cycle generates <strong>vapor in the bath</strong> that the compressors must absorb. Peak vapor generation is ~Q<sub>peak</sub> / h<sub>fg</sub>. R-717 example: for a 60-TR peak duty on a +30 °F bath (h<sub>fg</sub> ≈ 543 Btu/lb), that's ~22 lb/min of additional vapor — low-latent-heat halocarbons generate 5–8× the mass flow for the same duty — typically a manageable transient if the compressors have headroom, but it should be checked against system capacity, especially in high-utilization plants.
             </div>
           </div>
 
@@ -1803,7 +1877,7 @@ footer .seal svg{width: 22px; height: 22px}
             <div style="font-family:'Cormorant Garamond',serif;font-size:16px;line-height:1.55;color:var(--paper-2)">
               Boil-out coils see <em>warm</em> tube fluid in a <em>cold</em> bath at the start of the cycle, then progressively warming bath. For initial bath ≥ −20 °F: ASTM A106 Gr. B is acceptable. For initial bath below −20 °F (typical pull-down on a low-temp system): use <strong>A333 Gr. 6</strong> with Charpy impact testing. All welds NDT per IIAR 2.
               <p style="margin-top:10px;font-style:italic;color:var(--mute);font-size:14px">
-                Verify pipe MAWP separately per <strong>ASME B31.5</strong> (refrigeration piping) and applicable AHJ. Hot-gas mode sees discharge pressure (typically 150–250 psig). HP-liquid mode sees receiver pressure (typically 150–200 psig). HELIX does not compute or certify pipe pressure rating.
+                Verify pipe MAWP separately per <strong>ASME B31.5</strong> (refrigeration piping) and applicable AHJ. Hot-gas mode sees discharge pressure and HP-liquid mode sees receiver pressure — both set by the refrigerant's condensing pressure (R-717 ~150–250 psig; R-410A ~400+ psig; R-744 can exceed 1,000 psig). HELIX does not compute or certify pipe pressure rating.
               </p>
             </div>
           </div>
@@ -1812,7 +1886,7 @@ footer .seal svg{width: 22px; height: 22px}
           <div class="prop-card">
             <h4>Scope of the boil-out solver</h4>
             <div style="font-family:'Cormorant Garamond',serif;font-size:16px;line-height:1.55;color:var(--paper-2)">
-              <strong>Modeled:</strong> Lumped-capacitance bath energy balance (forward-Euler, 5-second steps); coil-side Dittus-Boelter + Schmidt helical correction; pool-boiling shell side at instantaneous bath T (linear correlation, calibrated −25 to +30 °F); heat-loss to ambient through insulated vessel shell; asymptote detection; bath cp updated at current T each step.
+              <strong>Modeled:</strong> Lumped-capacitance bath energy balance (forward-Euler, 5-second steps); coil-side Dittus-Boelter + Schmidt helical correction; pool-boiling shell side at instantaneous bath T (linear R-717 correlation calibrated −25 to +30 °F, Mostinski-scaled for other refrigerants); heat-loss to ambient through insulated vessel shell; asymptote detection; bath cp updated at current T each step.
               <br><br>
               <strong>Not modeled:</strong> Two-phase coil-side flow (condensing in hot-gas mode); bath vaporization mass loss during cycle (constant bath mass assumed); transient pressure on the bath side; non-condensables; oil-layer effect on shell-side h<sub>o</sub>; coil flooding/draining transient at cycle start/end; valve-actuation delay; insulation degradation over time.
               <br><br>
@@ -1892,6 +1966,8 @@ footer .seal svg{width: 22px; height: 22px}
 <!-- ============ SERVICE PANEL: HEAT RECOVERY ============ -->
 <div class="service-panel" id="panel-heatrecovery" role="tabpanel" aria-labelledby="tab-heatrecovery">
 
+<div class="prop-warnings" id="prop-warnings-hr" style="display:none"></div>
+
 <div class="shell">
 
   <!-- ===== LEFT: INPUT COLUMN with inner-tab toolbar ===== -->
@@ -1900,7 +1976,7 @@ footer .seal svg{width: 22px; height: 22px}
     <div class="toolbar">
       <button class="tool-btn active" data-tab="hr-sizer"><span class="idx">I</span>Sizer</button>
       <button class="tool-btn" data-tab="hr-geometry"><span class="idx">II</span>Geometry</button>
-      <button class="tool-btn" data-tab="hr-properties"><span class="idx">III</span>NH₃ Props</button>
+      <button class="tool-btn" data-tab="hr-properties"><span class="idx">III</span><span class="props-tab-label">R-717 Props</span></button>
       <button class="tool-btn" data-tab="hr-sweep"><span class="idx">IV</span>Sweep</button>
       <button class="tool-btn" data-tab="hr-notes"><span class="idx">V</span>Field Notes</button>
     </div>
@@ -2125,7 +2201,7 @@ footer .seal svg{width: 22px; height: 22px}
         </div>
         <div class="card-body">
           <p style="font-family:'Cormorant Garamond',serif;font-style:italic;font-size:17px;color:var(--paper-2);margin-bottom:18px">
-            Saturated NH₃ properties at the bath temperature, and tube-side properties for the selected secondary fluid at the inlet, outlet, and film temperatures.
+            Saturated refrigerant properties at the bath temperature, and tube-side properties for the selected secondary fluid at the inlet, outlet, and film temperatures.
           </p>
           <div class="form-row">
             <div class="field">
@@ -2216,7 +2292,7 @@ footer .seal svg{width: 22px; height: 22px}
           <div class="prop-card">
             <h4>What heat recovery means here</h4>
             <div style="font-family:'Cormorant Garamond',serif;font-size:16px;line-height:1.55;color:var(--paper-2)">
-              A secondary fluid (water or glycol mixture) circulates through the coil tubes and <strong>picks up heat from the boiling NH₃ pool</strong>. Reject refrigeration enthalpy becomes useful makeup heat for plant wash-down, defrost, snow melt, or process pre-heat. Heat flows IN THE OPPOSITE DIRECTION from a subcooler — the bath is the WARM side here.
+              A secondary fluid (water or glycol mixture) circulates through the coil tubes and <strong>picks up heat from the boiling refrigerant pool</strong>. Reject refrigeration enthalpy becomes useful makeup heat for plant wash-down, defrost, snow melt, or process pre-heat. Heat flows IN THE OPPOSITE DIRECTION from a subcooler — the bath is the WARM side here.
             </div>
           </div>
           <div class="prop-card">
@@ -2250,7 +2326,7 @@ footer .seal svg{width: 22px; height: 22px}
           <div class="prop-card">
             <h4>Free convection — not pool boiling</h4>
             <div style="font-family:'Cormorant Garamond',serif;font-size:16px;line-height:1.55;color:var(--paper-2)">
-              The shell-side mechanism here is <strong>natural-convection cooling of the warm NH₃ pool against the colder tube wall</strong> (Churchill-Chu 1975 horizontal-cylinder correlation), NOT pool boiling. The bath does not boil <em>at the tube wall</em> in heat-recovery service because the tube wall is colder than the bath; the pool boils at the suction-pressure free surface. HELIX iteratively converges the outer-wall temperature so the natural-convection ΔT is consistent with the duty.
+              The shell-side mechanism here is <strong>natural-convection cooling of the warm refrigerant pool against the colder tube wall</strong> (Churchill-Chu 1975 horizontal-cylinder correlation), NOT pool boiling. The bath does not boil <em>at the tube wall</em> in heat-recovery service because the tube wall is colder than the bath; the pool boils at the suction-pressure free surface. HELIX iteratively converges the outer-wall temperature so the natural-convection ΔT is consistent with the duty.
               <p style="margin-top:10px;padding:10px 12px;background:rgba(204,168,99,0.08);border-left:3px solid var(--brass);font-style:italic;color:var(--paper-2);font-size:14px;line-height:1.5">
                 <strong style="font-style:normal;color:var(--brass-2)">This is the most important physics correction in HELIX.</strong> Earlier versions of this calculation used the pool-boiling correlation here and overstated recovered duty by ~2× for typical scenarios. Confidence: high. Validity: Ra<sub>D</sub> ∈ [10⁻⁵, 10¹²], which covers all practical coil geometries.
               </p>
@@ -2259,7 +2335,7 @@ footer .seal svg{width: 22px; height: 22px}
           <div class="prop-card">
             <h4>Partial submergence</h4>
             <div style="font-family:'Cormorant Garamond',serif;font-size:16px;line-height:1.55;color:var(--paper-2)">
-              If the coil top pokes above the normal liquid level (net submergence &lt; 0 after the 6″ swell allowance), exposed turns see <strong>NH₃ vapor</strong> instead of liquid. Vapor-side h<sub>o</sub> at typical bath pressures is 2–5 Btu/hr·ft²·°F — essentially insulation. HELIX area-weights the effective h<sub>o</sub> when this happens and shows the submerged fraction prominently in the readout. <strong>Avoid this</strong> by sizing the vessel S/S length or coil pitch so the coil stays submerged at all operating levels.
+              If the coil top pokes above the normal liquid level (net submergence &lt; 0 after the 6″ swell allowance), exposed turns see <strong>refrigerant vapor</strong> instead of liquid. Vapor-side h<sub>o</sub> at typical R-717 bath pressures is 2–5 Btu/hr·ft²·°F — essentially insulation (denser halocarbon/CO₂ vapor runs somewhat higher, still far below the liquid side). HELIX area-weights the effective h<sub>o</sub> when this happens and shows the submerged fraction prominently in the readout. <strong>Avoid this</strong> by sizing the vessel S/S length or coil pitch so the coil stays submerged at all operating levels.
             </div>
           </div>
 
@@ -2273,7 +2349,7 @@ footer .seal svg{width: 22px; height: 22px}
           <div class="prop-card">
             <h4>Bypass and freeze protection</h4>
             <div style="font-family:'Cormorant Garamond',serif;font-size:16px;line-height:1.55;color:var(--paper-2)">
-              Coil tubes sit in an NH₃ bath ~−25 to +30 °F most of the time. The secondary fluid <strong>must not freeze in the tubes during low-flow conditions</strong>. Required:
+              Coil tubes sit in a refrigerant bath ~−25 to +30 °F most of the time. The secondary fluid <strong>must not freeze in the tubes during low-flow conditions</strong>. Required:
               <ul style="margin:8px 0 0 22px">
                 <li>Bypass loop with proportional control to maintain minimum tube velocity ≥ 3 ft/s at all times</li>
                 <li>Low-flow alarm and shut-off interlock</li>
@@ -2288,7 +2364,7 @@ footer .seal svg{width: 22px; height: 22px}
             <div style="font-family:'Cormorant Garamond',serif;font-size:16px;line-height:1.55;color:var(--paper-2)">
               For bath T down to −20 °F: ASTM A106 Gr. B carbon steel is acceptable. Below −20 °F: switch to A333 Gr. 6 with Charpy impact testing. All welds NDT to 100% per IIAR 2.
               <p style="margin-top:10px;font-style:italic;color:var(--mute);font-size:14px">
-                Verify pipe MAWP separately per ASME B31.5 and AHJ. Tube-side runs at glycol/water-loop pressure (typically 30–100 psig), well below NH₃ piping pressures, but the wall sees the differential. HELIX does not compute or certify pipe pressure rating.
+                Verify pipe MAWP separately per ASME B31.5 and AHJ. Tube-side runs at glycol/water-loop pressure (typically 30–100 psig), usually well below refrigerant-side pressures (dramatically so for R-744), but the wall sees the differential. HELIX does not compute or certify pipe pressure rating.
               </p>
             </div>
           </div>
@@ -2297,7 +2373,7 @@ footer .seal svg{width: 22px; height: 22px}
           <div class="prop-card">
             <h4>Scope of the heat-recovery solver</h4>
             <div style="font-family:'Cormorant Garamond',serif;font-size:16px;line-height:1.55;color:var(--paper-2)">
-              <strong>Modeled:</strong> Steady-state NTU-effectiveness with the boiling NH₃ pool at constant saturation T (no shell-side T glide); Dittus-Boelter tube side (n = 0.4, heating) + Schmidt helical correction; Churchill-Chu natural convection on the shell side with iteratively-converged outer-wall T; partial-submergence area-weighting; Ito pressure drop; water / 30% glycol / 50% glycol property tables fit to ASHRAE.
+              <strong>Modeled:</strong> Steady-state NTU-effectiveness with the boiling refrigerant pool at constant saturation T (no shell-side T glide — note zeotropic blends like R-407C really do glide); Dittus-Boelter tube side (n = 0.4, heating) + Schmidt helical correction; Churchill-Chu natural convection on the shell side with iteratively-converged outer-wall T; partial-submergence area-weighting; Ito pressure drop; water / 30% glycol / 50% glycol property tables fit to ASHRAE.
               <br><br>
               <strong>Not modeled:</strong> Boiling-induced agitation enhancement of the shell-side h<sub>o</sub> beyond Churchill-Chu (real coils may run slightly better than the prediction when pool boiling at the free surface is vigorous); transient start-up; freezing of tube-side fluid; secondary loop hydraulics outside the coil; bypass-loop control behavior; long-term glycol degradation effects on h<sub>i</sub>.
               <br><br>
@@ -2374,9 +2450,9 @@ footer .seal svg{width: 22px; height: 22px}
   <span>HELIX · An Atelier for Refrigeration Engineers</span>
   <span class="seal">
     <svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="#c8a564" stroke-width="1"/><circle cx="12" cy="12" r="3" fill="#c8a564"/></svg>
-    Calibrated to 3 reference designs · ±0.2°F
+    R-717 calibrated to 3 reference designs · ±0.2°F
   </span>
-  <span>R-717 Native · IIAR-Aware</span>
+  <span>Multi-Refrigerant · CoolProp-Backed</span>
 </footer>
 
 <!-- ============ HELP MODAL ============ -->
@@ -2577,6 +2653,7 @@ function maxStandardWindings(vessel_id){
 
    Returns { volume_ft3, mass_lb } at the specified liquid level (as %
    of total internal height). rho_lb_ft3 defaults to liquid NH3 at -20 °F
+   (legacy fallback only — every live caller passes refSat().rho_l)
    (39.2 lb/ft³) but caller can override. */
 function vesselLiquidInventory(vessel_id, vessel_ss_in, level_pct, rho_lb_ft3){
   rho_lb_ft3 = rho_lb_ft3 || 39.2;   // liquid NH3, mid-range
@@ -2641,9 +2718,159 @@ function vesselShellArea(vessel_id, vessel_ss_in){
   return cylindrical + 2 * head_area_each;
 }
 
-/* ─── 1.5 Fluid property models ──────────────────────────────────────────────── */
+/* ─── 1.5 Fluid property engine — multi-refrigerant, CoolProp-backed ──────────
+   All refrigerant thermodynamic & transport properties come from the CoolProp
+   WASM library (REFPROP-grade Helmholtz EOS, loaded asynchronously at startup).
+   The legacy R-717 polynomial fits are retained below (…_poly) ONLY as a
+   fallback so the program still works ammonia-only if the WASM module cannot
+   load (e.g. opened from file:// where fetch of the .wasm is blocked).
 
-function nh3Sat(T_F){
+   Public API used throughout the app (IP units, same shapes as the old model):
+     refSat(T_F [,key])   saturation state   {P_psia,h_f,h_g,h_fg,rho_l,rho_g,rho_v,
+                                              cp_l,mu_l,k_l,sigma_Nm,glide_F,…}
+     refState(T_F, x)     two-phase mix at quality x
+     refSatVapor(T_F)     saturated-VAPOR transport props (legacy key names)
+     refHotGas(T_F)       superheated vapor at the fluid's typical discharge P
+     refBetaLiquid(T_F)   liquid isobaric expansion coefficient [1/°R]
+     serviceProps(svc,T)  service dispatch (refrigerant AND secondary fluids)
+     poolBoilHo(T_bath)   shell-side pool-boiling h_o — R-717 field calibration
+                          × Mostinski reduced-pressure fluid correction
+     fluxLimits(T_bath)   {q_practical, q_chf} heat-flux ceilings, fluid-aware
+   Enthalpy reference: h_f = 0 at −40 °F for every fluid (ASHRAE IP convention),
+   so displayed h values stay familiar and h_fg differences are exact.        */
+
+const REFRIGERANTS = {
+  R717:    { cp: 'Ammonia',       short: 'R-717',    name: 'Ammonia',        safety: 'B2L' },
+  R134A:   { cp: 'R134a',         short: 'R-134a',   name: 'HFC-134a',       safety: 'A1'  },
+  R22:     { cp: 'R22',           short: 'R-22',     name: 'HCFC-22',        safety: 'A1'  },
+  R404A:   { cp: 'R404A',         short: 'R-404A',   name: 'HFC blend',      safety: 'A1', blend: true },
+  R407C:   { cp: 'R407C',         short: 'R-407C',   name: 'HFC blend',      safety: 'A1', blend: true },
+  R410A:   { cp: 'R410A',         short: 'R-410A',   name: 'HFC blend',      safety: 'A1', blend: true },
+  R507A:   { cp: 'R507A',         short: 'R-507A',   name: 'HFC azeotrope',  safety: 'A1', blend: true },
+  R744:    { cp: 'CarbonDioxide', short: 'R-744',    name: 'Carbon dioxide', safety: 'A1'  },
+  R290:    { cp: 'Propane',       short: 'R-290',    name: 'Propane',        safety: 'A3'  },
+  R1234YF: { cp: 'R1234yf',       short: 'R-1234yf', name: 'HFO-1234yf',     safety: 'A2L' },
+};
+
+let CP = null;          // CoolProp WASM module — null until loaded (→ R-717 poly fallback)
+let CP_META = null;     // per-fluid constants, built once in initCoolPropEngine()
+let REF_KEY = 'R717';   // active refrigerant key into REFRIGERANTS
+const PROP_WARN = new Map();   // out-of-range property warnings, keyed for dedup
+
+// IP-unit conversion constants (SI → IP)
+const _PA_PER_PSI = 6894.757293168;
+const _J_PER_BTULB = 2326.0;              // J/kg per Btu/lb
+const _JKGK_PER_BTULBF = 4186.8;          // J/kg·K per Btu/lb·°F
+const _LBFT3_PER_KGM3 = 0.06242796;       // lb/ft³ per kg/m³
+const _LBFTHR_PER_PAS = 2419.0883;        // lb/ft·hr per Pa·s
+const _BTUHRFTF_PER_WMK = 0.57778934;     // Btu/hr·ft·°F per W/m·K
+function _F2K(F){ return (F - 32)/1.8 + 273.15; }
+function _K2F(K){ return (K - 273.15)*1.8 + 32; }
+
+function refShort(key){ return REFRIGERANTS[key || REF_KEY].short; }
+function refFullName(key){ const r = REFRIGERANTS[key || REF_KEY]; return r.short + ' · ' + r.name; }
+function refIsNH3(){ return REF_KEY === 'R717'; }
+function propEngineLive(){ return !!CP; }
+function propSourceLabel(){
+  return CP ? ('CoolProp ' + (CP_META && CP_META._version ? CP_META._version : '') + ' · Helmholtz EOS').replace('  ',' ')
+            : 'R-717 polynomial fits · ASHRAE 2017 (CoolProp unavailable)';
+}
+
+// Decode an embind exception thrown by the WASM module into a readable message
+function _cpErr(e){
+  if (CP && typeof e === 'number'){
+    try { const m = CP.getExceptionMessage(e); return Array.isArray(m) ? m.join(': ') : String(m); }
+    catch(_){ /* fall through */ }
+  }
+  return (e && e.message) ? e.message : String(e);
+}
+
+// Memoized raw PropsSI call. Inputs quantized to 0.005 units — far below any
+// engineering significance — so the iterative solvers and sweep/optimizer
+// loops hit the cache instead of re-entering the WASM EOS on every pass.
+const _propMemo = new Map();
+function _cp(out, n1, v1, n2, v2, fluid){
+  const k = out+'|'+n1+'|'+(Math.round(v1*200)/200)+'|'+n2+'|'+(Math.round(v2*200)/200)+'|'+fluid;
+  let r = _propMemo.get(k);
+  if (r === undefined){
+    if (_propMemo.size > 60000) _propMemo.clear();
+    try { r = CP.PropsSI(out, n1, v1, n2, v2, fluid); }
+    catch(e){ throw new Error('CoolProp ' + out + '(' + n1 + '=' + v1.toFixed(2) + ', ' + n2 + '=' + v2.toFixed(2) + ', ' + fluid + '): ' + _cpErr(e)); }
+    _propMemo.set(k, r);
+  }
+  return r;
+}
+
+/* Clamp a requested saturation temperature into the fluid's valid two-phase
+   window [triple point + 0.5 °F, critical point − 2 °F]. Out-of-range
+   requests are clamped (never thrown) and a user-visible warning is queued —
+   critical for R-744, whose 87.8 °F critical point sits below common
+   HP-liquid temperatures.                                                  */
+function clampSatT(T_F, key){
+  key = key || REF_KEY;
+  const m = CP_META && CP_META[key];
+  if (!m) return T_F;
+  if (T_F > m.satMaxF){
+    PROP_WARN.set(key + '|hi', refShort(key) + ': requested ' + T_F.toFixed(1) +
+      ' °F is above the usable saturation ceiling (' + m.satMaxF.toFixed(1) +
+      ' °F — critical point ' + m.TcritF.toFixed(1) + ' °F). Properties evaluated at ' +
+      m.satMaxF.toFixed(1) + ' °F; results there are NOT valid design values.');
+    return m.satMaxF;
+  }
+  if (T_F < m.satMinF){
+    PROP_WARN.set(key + '|lo', refShort(key) + ': requested ' + T_F.toFixed(1) +
+      ' °F is below the triple point (' + m.TtripF.toFixed(1) + ' °F). Properties evaluated at ' +
+      m.satMinF.toFixed(1) + ' °F.');
+    return m.satMinF;
+  }
+  return T_F;
+}
+
+/* Saturation state of the ACTIVE refrigerant (or an explicit key) at T °F.
+   For zeotropic blends, liquid properties are taken at the bubble point and
+   vapor properties at the dew point (both at temperature T); P_psia is the
+   bubble pressure and glide_F reports the dew−bubble temperature glide at
+   that pressure.                                                           */
+function refSat(T_F, key){
+  key = key || REF_KEY;
+  if (!CP) return nh3Sat_poly(T_F);
+  const Tc = clampSatT(T_F, key);
+  const mk = key + '|sat|' + (Math.round(Tc*100)/100);
+  let s = _propMemo.get(mk);
+  if (s) return s;
+  const f = REFRIGERANTS[key].cp, m = CP_META[key];
+  const T = _F2K(Tc);
+  const P_bub = _cp('P','T',T,'Q',0,f);
+  const P_dew = _cp('P','T',T,'Q',1,f);
+  const h_f = (_cp('H','T',T,'Q',0,f) - m.hOffJ)/_J_PER_BTULB;
+  const h_g = (_cp('H','T',T,'Q',1,f) - m.hOffJ)/_J_PER_BTULB;
+  const rho_g = _cp('D','T',T,'Q',1,f)*_LBFT3_PER_KGM3;
+  let glide_F = 0;
+  if (REFRIGERANTS[key].blend){
+    try { glide_F = Math.max(0, _K2F(_cp('T','P',P_bub,'Q',1,f)) - Tc); } catch(e){ glide_F = 0; }
+  }
+  let sigma_Nm;
+  try { sigma_Nm = _cp('I','T',T,'Q',0,f); }
+  catch(e){ sigma_Nm = 0.01; }   // last-resort estimate; only feeds the reference-only CHF number
+  s = {
+    T_F: Tc, T_req_F: T_F,
+    P_psia: P_bub/_PA_PER_PSI,
+    P_dew_psia: P_dew/_PA_PER_PSI,
+    glide_F,
+    h_f, h_g, h_fg: h_g - h_f,
+    rho_l: _cp('D','T',T,'Q',0,f)*_LBFT3_PER_KGM3,
+    rho_g, rho_v: rho_g,
+    cp_l: _cp('C','T',T,'Q',0,f)/_JKGK_PER_BTULBF,
+    mu_l: _cp('V','T',T,'Q',0,f)*_LBFTHR_PER_PAS,
+    k_l:  _cp('L','T',T,'Q',0,f)*_BTUHRFTF_PER_WMK,
+    sigma_Nm
+  };
+  _propMemo.set(mk, s);
+  return s;
+}
+
+/* Legacy R-717 polynomial model — FALLBACK ONLY (CoolProp unavailable). */
+function nh3Sat_poly(T_F){
   // T in °F; returns saturation properties in IP units.
   // ALL polynomial fits calibrated against ASHRAE Handbook 2017
   // (R-717 saturation tables), maximum error < 1% across −40 to +120 °F.
@@ -2679,13 +2906,14 @@ function nh3Sat(T_F){
   const sigma_Nm = 0.0337 - 1.05e-4*T;
 
   return {
-    T_F:T, P_psia, h_f, h_g, h_fg,
-    rho_l, rho_g, cp_l, mu_l, k_l, sigma_Nm
+    T_F:T, T_req_F:T, P_psia, P_dew_psia: P_psia, glide_F: 0, h_f, h_g, h_fg,
+    rho_l, rho_g, rho_v: rho_g, cp_l, mu_l, k_l, sigma_Nm
   };
 }
 
-function nh3State(T_F, x){
-  const s = nh3Sat(T_F);
+/* Two-phase mix of the active refrigerant at temperature T and quality x. */
+function refState(T_F, x){
+  const s = refSat(T_F);
   return {
     ...s,
     h: s.h_f + x*s.h_fg,
@@ -2694,22 +2922,138 @@ function nh3State(T_F, x){
   };
 }
 
-function serviceProps(svc, T_F){
-  if (svc === "hp_liquid" || svc === "nh3_liq") return nh3Sat(T_F);
-  if (svc === "nh3_vap" || svc === "hot_gas"){
-    // Superheated NH3 vapor at moderate pressure (140-200 psig discharge).
-    // Polynomial fits to NIST REFPROP values at ~170 psia over T = 120-240 °F.
-    // Validity: hot-gas defrost / boil-out service. Not for low-side vapor.
-    const T = T_F;
-    return {
-      rho_l: 1.62 - 0.0022*(T - 170),     // lb/ft³  (~1.6 at 170 °F, 170 psia)
-      cp_l: 0.587 + 0.00018*(T - 170),    // Btu/lb·°F (vapor cp_p)
-      mu_l: 0.0288 + 0.000018*(T - 170),  // lb/ft·hr  (vapor viscosity)
-      k_l: 0.0179 + 0.000015*(T - 170),   // Btu/hr·ft·°F (vapor)
-      P_psia: 170,
-      phase: 'vapor'
-    };
+/* Saturated-VAPOR transport properties of the active refrigerant at T °F.
+   Same legacy key names as the old nh3SatVapor (vapor values under *_l keys)
+   so the natural-convection code takes liquid or vapor without branching.  */
+function refSatVapor(T_F){
+  if (!CP) return nh3SatVapor_poly(T_F);
+  const key = REF_KEY;
+  const Tc = clampSatT(T_F, key);
+  const mk = key + '|satv|' + (Math.round(Tc*100)/100);
+  let s = _propMemo.get(mk);
+  if (s) return s;
+  const f = REFRIGERANTS[key].cp;
+  const T = _F2K(Tc);
+  const rho = _cp('D','T',T,'Q',1,f)*_LBFT3_PER_KGM3;
+  s = {
+    rho_l: rho, rho_v: rho,
+    cp_l: _cp('C','T',T,'Q',1,f)/_JKGK_PER_BTULBF,
+    mu_l: _cp('V','T',T,'Q',1,f)*_LBFTHR_PER_PAS,
+    k_l:  _cp('L','T',T,'Q',1,f)*_BTUHRFTF_PER_WMK,
+    P_psia: _cp('P','T',T,'Q',1,f)/_PA_PER_PSI,
+    phase: 'sat_vapor'
+  };
+  _propMemo.set(mk, s);
+  return s;
+}
+
+/* Superheated vapor of the active refrigerant at its typical high-side
+   (discharge) pressure — the hot-gas defrost / boil-out heating service.
+   Discharge P per fluid = dew pressure at a 95 °F condensing temperature,
+   capped at 0.9·P_crit (R-744 has no 95 °F saturation state, so it uses the
+   0.9·P_crit cap ≈ 960 psia, representative of high-pressure CO₂ defrost). */
+function refHotGas(T_F){
+  if (!CP) return nh3HotGas_poly(T_F);
+  const key = REF_KEY, m = CP_META[key];
+  let Tq = T_F;
+  if (Tq < m.gasMinF){
+    PROP_WARN.set(key + '|gas', refShort(key) + ' hot gas: ' + T_F.toFixed(1) +
+      ' °F is below the dew point at the assumed discharge pressure (' +
+      m.PdisPsia.toFixed(0) + ' psia → ' + (m.gasMinF - 1).toFixed(1) +
+      ' °F). Evaluated as vapor at ' + m.gasMinF.toFixed(1) + ' °F.');
+    Tq = m.gasMinF;
   }
+  const mk = key + '|gas|' + (Math.round(Tq*100)/100);
+  let s = _propMemo.get(mk);
+  if (s) return s;
+  const f = REFRIGERANTS[key].cp;
+  const T = _F2K(Tq);
+  s = {
+    rho_l: _cp('D','T',T,'P',m.PdisPa,f)*_LBFT3_PER_KGM3,
+    cp_l:  _cp('C','T',T,'P',m.PdisPa,f)/_JKGK_PER_BTULBF,
+    mu_l:  _cp('V','T',T,'P',m.PdisPa,f)*_LBFTHR_PER_PAS,
+    k_l:   _cp('L','T',T,'P',m.PdisPa,f)*_BTUHRFTF_PER_WMK,
+    P_psia: m.PdisPsia,
+    phase: 'vapor'
+  };
+  _propMemo.set(mk, s);
+  return s;
+}
+
+/* Liquid isobaric thermal-expansion coefficient β [1/°R] at saturation. */
+function refBetaLiquid(T_F){
+  if (!CP) return nh3_beta_liquid_poly(T_F);
+  const key = REF_KEY;
+  const Tc = clampSatT(T_F, key);
+  const mk = key + '|beta|' + (Math.round(Tc*100)/100);
+  let b = _propMemo.get(mk);
+  if (b !== undefined) return b;
+  const f = REFRIGERANTS[key].cp;
+  b = _cp('isobaric_expansion_coefficient','T',_F2K(Tc),'Q',0,f)/1.8;  // 1/K → 1/°R
+  _propMemo.set(mk, b);
+  return b;
+}
+
+/* Zuber hydrodynamic critical heat flux [BTU/hr·ft²] on a flat plate —
+   reference ceiling, property-driven so it is fluid-correct automatically. */
+function zuberCHF(T_bath_F, key){
+  const s = refSat(T_bath_F, key);
+  const hfg_SI = s.h_fg * 2326;
+  const rho_g_SI = s.rho_g * 16.0185;
+  const rho_l_SI = s.rho_l * 16.0185;
+  const q_SI = 0.131*hfg_SI*Math.pow(rho_g_SI, 0.5)
+               *Math.pow(Math.max(0, s.sigma_Nm*9.81*(rho_l_SI - rho_g_SI)), 0.25);
+  return q_SI*0.3170;
+}
+
+/* Mostinski nucleate-boiling factor  P_c^0.69 · F(p_r)  with
+   F(p_r) = 1.8·p_r^0.17 + 4·p_r^1.2 + 10·p_r^10   (P_c in kPa).
+   Used only as a RATIO between fluids at the same bath T and heat flux.   */
+function _mostinskiF(key, T_bath_F){
+  const m = CP_META[key];
+  const Tc = Math.min(Math.max(T_bath_F, m.satMinF), m.satMaxF);
+  const P = _cp('P','T',_F2K(Tc),'Q',0,REFRIGERANTS[key].cp);
+  const pr = Math.min(0.98, Math.max(1e-4, P/m.PcritPa));
+  const Fp = 1.8*Math.pow(pr,0.17) + 4*Math.pow(pr,1.2) + 10*Math.pow(pr,10);
+  return Math.pow(m.PcritPa/1000, 0.69) * Fp;
+}
+
+/* Shell-side pool-boiling coefficient [BTU/hr·ft²·°F].
+   Base: the linear R-717 field calibration h = 3.6107·T_bath + 409.19
+   (three industrial reference designs, −25…+30 °F bath, clamped 200–800 —
+   the ONE shared implementation of the correlation for all tabs & reports).
+   Other refrigerants: base × Mostinski reduced-pressure ratio vs R-717 at
+   the same bath temperature — exact for ammonia (ratio 1), a documented
+   engineering estimate for everything else.                               */
+function poolBoilScale(T_bath_F){
+  if (!CP || REF_KEY === 'R717') return 1.0;
+  const fNH3 = _mostinskiF('R717', T_bath_F);
+  return fNH3 > 0 ? _mostinskiF(REF_KEY, T_bath_F)/fNH3 : 1.0;
+}
+function poolBoilHo(T_bath_F){
+  const base = Math.max(200, Math.min(800, 3.6107*T_bath_F + 409.19));
+  const scale = poolBoilScale(T_bath_F);
+  return { h: base*scale, base, scale };
+}
+
+/* Heat-flux ceilings at the given bath temperature.
+   q_chf       — Zuber CHF for the active fluid (reference only).
+   q_practical — the plain-steel industrial practical limit. 10,000 BTU/hr·ft²
+   is R-717 practice; other fluids scale it by their Zuber-CHF ratio to NH3
+   at the same bath T (clamped to a sane band).                             */
+function fluxLimits(T_bath_F){
+  const q_chf = zuberCHF(T_bath_F, REF_KEY);
+  if (!CP || REF_KEY === 'R717') return { q_practical: 10000, q_chf };
+  const q_chf_nh3 = zuberCHF(T_bath_F, 'R717');
+  const q_practical = Math.min(30000, Math.max(500, 10000 * (q_chf/Math.max(q_chf_nh3,1))));
+  return { q_practical, q_chf };
+}
+
+function serviceProps(svc, T_F){
+  // Refrigerant services route through the CoolProp engine for the ACTIVE fluid.
+  // (Legacy service tokens 'nh3_liq'/'nh3_vap' are kept for wiring compatibility.)
+  if (svc === "hp_liquid" || svc === "nh3_liq" || svc === "ref_liq") return refSat(T_F);
+  if (svc === "nh3_vap" || svc === "hot_gas" || svc === "ref_vap") return refHotGas(T_F);
   if (svc === "warm_water" || svc === "water"){
     // Water properties calibrated to ASHRAE Handbook 2017 ch.31, valid 32-120°F.
     // Viscosity uses Arrhenius-like form μ = A·exp(B/(T+C)); max error 0.3% vs reference.
@@ -2755,17 +3099,32 @@ function serviceProps(svc, T_F){
     };
   }
   // Fallback
-  return nh3Sat(T_F);
+  return refSat(T_F);
 }
 
 
-/* Saturated NH3 vapor property model (Patch B).
+/* Legacy superheated NH3 vapor polynomials at ~170 psia — FALLBACK ONLY.
+   (Fits to NIST REFPROP values over T = 120-240 °F, hot-gas defrost range.) */
+function nh3HotGas_poly(T_F){
+  const T = T_F;
+  return {
+    rho_l: 1.62 - 0.0022*(T - 170),     // lb/ft³  (~1.6 at 170 °F, 170 psia)
+    cp_l: 0.587 + 0.00018*(T - 170),    // Btu/lb·°F (vapor cp_p)
+    mu_l: 0.0288 + 0.000018*(T - 170),  // lb/ft·hr  (vapor viscosity)
+    k_l: 0.0179 + 0.000015*(T - 170),   // Btu/hr·ft·°F (vapor)
+    P_psia: 170,
+    phase: 'vapor'
+  };
+}
+
+
+/* Legacy saturated NH3 vapor property model (Patch B) — FALLBACK ONLY.
    For natural-convection / free-convection calculations on coil turns
    exposed above the liquid level — the vapor side of the bath.
    Polynomial fits to ASHRAE 2017 R-717 sat-vapor tables, valid -40 to +60 °F.
    Returns the same keys as serviceProps so downstream natural-convection
    code can take either liquid or vapor without branching.            */
-function nh3SatVapor(T_F){
+function nh3SatVapor_poly(T_F){
   const T = T_F;
   return {
     rho_l: 0.0265 * Math.exp(0.0193*(T + 40)),   // lb/ft³  (≈0.07 @ -10°F, 0.55 @ 70°F)
@@ -2782,13 +3141,154 @@ function nh3SatVapor(T_F){
    β = -(1/ρ)·(∂ρ/∂T)_p ; computed from the density polynomial in nh3Sat
    by central difference at film T. Used for Rayleigh number in natural
    convection.                                                       */
-function nh3_beta_liquid(T_F){
+function nh3_beta_liquid_poly(T_F){
   const eps = 1.0;
-  const rho_hi = nh3Sat(T_F + eps).rho_l;
-  const rho_lo = nh3Sat(T_F - eps).rho_l;
-  const rho_0  = nh3Sat(T_F).rho_l;
+  const rho_hi = nh3Sat_poly(T_F + eps).rho_l;
+  const rho_lo = nh3Sat_poly(T_F - eps).rho_l;
+  const rho_0  = nh3Sat_poly(T_F).rho_l;
   // β = -(1/ρ)·dρ/dT, with dT in °R (= °F for differences)
   return -(rho_hi - rho_lo) / (2*eps) / rho_0;
+}
+
+
+/* ─── 1.5b Property-engine lifecycle & refrigerant selector ─────────────────────
+   The CoolProp WASM module loads from a <script type="module"> at the end of
+   the document and hands the instantiated module to initCoolPropEngine().
+   Until then (or forever, if loading fails) the app runs on the legacy R-717
+   polynomials and the selector is locked to R-717.                          */
+
+function initCoolPropEngine(module){
+  CP = module;
+  CP_META = {};
+  try { CP_META._version = CP.get_global_param_string('version'); } catch(e){ CP_META._version = ''; }
+  for (const key of Object.keys(REFRIGERANTS)){
+    const f = REFRIGERANTS[key].cp;
+    const TcritF = _K2F(CP.Props1SI(f, 'Tcrit'));
+    const TtripF = _K2F(CP.Props1SI(f, 'Ttriple'));
+    const PcritPa = CP.Props1SI(f, 'pcrit');
+    const m = {
+      TcritF, TtripF, PcritPa,
+      PcritPsia: PcritPa/_PA_PER_PSI,
+      satMinF: TtripF + 0.5,
+      satMaxF: TcritF - 2.0,
+      hOffJ: CP.PropsSI('H','T',_F2K(-40),'Q',0,f)   // ASHRAE IP: h_f = 0 at −40 °F
+    };
+    // Typical high-side (discharge) pressure for the hot-gas service:
+    // dew pressure at 95 °F condensing, capped at 0.9·P_crit (the cap is the
+    // operative value for R-744, which cannot condense at 95 °F).
+    let Pdis;
+    try { Pdis = CP.PropsSI('P','T',_F2K(95),'Q',1,f); } catch(e){ Pdis = 0.9*PcritPa; }
+    Pdis = Math.min(Pdis, 0.9*PcritPa);
+    m.PdisPa = Pdis;
+    m.PdisPsia = Pdis/_PA_PER_PSI;
+    m.gasMinF = _K2F(CP.PropsSI('T','P',Pdis,'Q',1,f)) + 1;
+    CP_META[key] = m;
+  }
+
+  // Restore the last-used refrigerant and unlock the selector.
+  let saved = null;
+  try { saved = localStorage.getItem('helix_refrigerant'); } catch(e){}
+  if (saved && REFRIGERANTS[saved]) REF_KEY = saved;
+  const sel = document.getElementById('refrigerant');
+  if (sel){ sel.disabled = false; sel.value = REF_KEY; }
+
+  refreshFluidLabels();
+  recomputeAllTabs();
+}
+
+function coolPropEngineFailed(err){
+  console.error('CoolProp WASM failed to load — running R-717 polynomial fallback.', err);
+  REF_KEY = 'R717';
+  const sel = document.getElementById('refrigerant');
+  if (sel){ sel.value = 'R717'; sel.disabled = true; sel.title = 'CoolProp failed to load — R-717 polynomial fallback only. Serve over HTTP for multi-refrigerant support.'; }
+  const eng = document.getElementById('ref-engine');
+  if (eng){
+    eng.textContent = 'CoolProp unavailable — R-717 polynomial fallback';
+    eng.classList.add('engine-fallback');
+  }
+  refreshFluidLabels();
+}
+
+function setRefrigerant(key){
+  if (!REFRIGERANTS[key] || key === REF_KEY) return;
+  if (!CP && key !== 'R717') return;             // locked to R-717 until engine loads
+  REF_KEY = key;
+  try { localStorage.setItem('helix_refrigerant', key); } catch(e){}
+  refreshFluidLabels();
+  recomputeAllTabs();
+}
+
+function recomputeAllTabs(){
+  try { recompute(); } catch(e){ console.error('subcooler recompute failed:', e); }
+  try { boilout_recompute(); } catch(e){ console.error('boil-out recompute failed:', e); }
+  try { hr_recompute(); } catch(e){ console.error('heat-recovery recompute failed:', e); }
+}
+
+/* Repaint every fluid-dependent label in the static chrome. Elements carrying
+   class="ref-name" get the short designation (e.g. "R-404A"); the rest are
+   updated by id.                                                            */
+function refreshFluidLabels(){
+  const r = REFRIGERANTS[REF_KEY];
+  const m = CP_META && CP_META[REF_KEY];
+
+  document.title = 'HELIX — ' + r.short + ' Coil Engineering Atelier';
+  document.querySelectorAll('.ref-name').forEach(el => { el.textContent = r.short; });
+  document.querySelectorAll('.props-tab-label').forEach(el => { el.textContent = r.short + ' Props'; });
+
+  const set = (id, txt) => { const el = document.getElementById(id); if (el) el.textContent = txt; };
+  set('coil-cap-ref', r.short + ' · Double-Wound');
+  set('hero-ref-chip', CP ? r.short + ' · ' + r.name : 'R-717 Native');
+  set('props-head-sub', r.name + ' Properties · ' + r.short);
+  set('bo-props-head', r.name + ' Properties · ' + r.short);
+  set('hr-props-head', r.name + ' Properties · ' + r.short);
+
+  const meta = document.getElementById('ref-meta');
+  if (meta){
+    meta.textContent = m
+      ? ('T_crit ' + m.TcritF.toFixed(1) + ' °F · P_crit ' + m.PcritPsia.toFixed(0) + ' psia · ' +
+         r.safety + ' · sat range ' + m.satMinF.toFixed(0) + '…' + m.satMaxF.toFixed(0) + ' °F')
+      : 'T_crit 270.3 °F · P_crit 1644 psia · B2L';
+  }
+  const eng = document.getElementById('ref-engine');
+  if (eng && CP){ eng.textContent = 'CoolProp ' + (CP_META._version || '') + ' · WASM live'; eng.classList.remove('engine-fallback'); }
+
+  // Select-option labels that name the refrigerant
+  const opt = (selId, val, txt) => {
+    const s = document.getElementById(selId);
+    if (!s) return;
+    const o = Array.from(s.options).find(o => o.value === val);
+    if (o) o.textContent = txt;
+  };
+  opt('shell_fluid', 'nh3_liq', 'Liquid ' + r.short + ' (subcooled)');
+  opt('shell_mode', 'pool_boil', 'Pool-Boiling ' + r.short + ' (default)');
+  opt('bo_fluid', 'hp_liquid', 'HP Liquid ' + r.short + ' (warm receiver)');
+  opt('bo_fluid', 'hot_gas', 'Hot Gas ' + r.short + ' (compressor discharge)');
+  opt('bo_probe_q', 'hot_gas', m ? ('Hot Discharge Gas (~' + m.PdisPsia.toFixed(0) + ' psia)') : 'Hot Discharge Gas (~170 psia)');
+  opt('hr_probe_side', 'bath', 'Bath (Saturated ' + r.short + ')');
+
+  // MAWP / design-pressure guidance in the Field Notes card
+  const mawp = document.getElementById('mawp-note');
+  if (mawp){
+    if (REF_KEY === 'R744'){
+      mawp.innerHTML = 'R-744 high side is <strong>transcritical</strong> above 87.8 °F — gas-cooler design pressure commonly ≥ <strong>1,450 psig</strong>; subcritical HP liquid at 80 °F already sits near <strong>960 psia</strong>.';
+    } else if (m){
+      const p115 = (CP ? refSat(115 > m.satMaxF ? m.satMaxF : 115, REF_KEY).P_dew_psia : 251) - 14.7;
+      mawp.innerHTML = 'for ' + r.short + ' condensing service, saturation at 115 °F ≈ <strong>' +
+        Math.round(p115) + ' psig</strong> — a common basis for the high-side relief setting.';
+    } else {
+      mawp.innerHTML = 'typically <strong>≥ 250 psig</strong> for ammonia condensing service.';
+    }
+  }
+}
+
+/* Paint queued out-of-range property warnings into the given banner div.   */
+function renderPropWarnings(bannerId){
+  const el = document.getElementById(bannerId);
+  if (!el) return;
+  if (!PROP_WARN.size){ el.style.display = 'none'; el.innerHTML = ''; return; }
+  el.style.display = '';
+  el.innerHTML = '<div class="pw-head">◆ Property-range warnings · ' + refShort() + '</div>' +
+    Array.from(PROP_WARN.values()).map(w => '<div class="pw-item">' + w + '</div>').join('');
 }
 
 
@@ -2862,7 +3362,7 @@ const HELP = {
     title: "Inlet <em>Pressure</em>",
     body: `<p><strong>Optional.</strong> The pressure of the HP liquid as it enters the coil. Used to compute a <em>flash margin</em> — the difference between the actual pressure and the saturation pressure at the local liquid temperature.</p>
     <p>If the inlet pressure is too close to (or below) the saturation pressure at the inlet temperature, the liquid will partially flash to vapor inside the coil. Flashing breaks single-phase flow, drops the inside h<sub>i</sub>, creates two-phase distribution problems, and invalidates HELIX's NTU model.</p>
-    <p class="typical">Typical HP liquid lines from a flooded condenser run at 150–200 psia depending on condenser saturation temperature. For NH₃ at 90 °F saturation, P<sub>sat</sub> ≈ 181 psia, so a receiver at 175 psia would already be marginal. A 5 psi margin above saturation is the conventional minimum for stable single-phase flow.</p>
+    <p class="typical">HP liquid lines from a flooded condenser run at the condensing pressure of the selected refrigerant (R-717 example: at 90 °F saturation P<sub>sat</sub> ≈ 181 psia, so a receiver at 175 psia would already be marginal; R-410A or R-744 run far higher). A 5 psi margin above saturation is the conventional minimum for stable single-phase flow.</p>
     <p>If left blank, HELIX skips the flash check entirely. The pressure value does not affect the heat-transfer calculation — it is purely a sanity check on the upstream supply.</p>`
   },
   n_windings: {
@@ -2909,12 +3409,12 @@ const HELP = {
     title: "Shell-Side <em>Mode</em>",
     body: `<p>Sets how heat transfer is calculated on the <em>outside</em> of the coil.</p>
     <ul>
-      <li><strong>Pool-Boiling NH₃ (default)</strong> — coil submerged in saturated liquid ammonia at the suction pressure; boiling provides the cooling. h<sub>o</sub> from the T-dependent correlation calibrated to three industrial reference designs. <em>This is the standard accumulator/intercooler subcooler service.</em></li>
+      <li><strong>Pool-Boiling refrigerant (default)</strong> — coil submerged in saturated liquid refrigerant at the suction pressure; boiling provides the cooling. h<sub>o</sub> from the T-dependent correlation calibrated to three industrial R-717 reference designs (Mostinski reduced-pressure scaling applied for other refrigerants). <em>This is the standard accumulator/intercooler subcooler service.</em></li>
       <li><strong>Static Liquid Bath</strong> — coil submerged in a non-boiling liquid (e.g. cold glycol or water that does not boil at operating pressure). h<sub>o</sub> from free-convection correlation (Churchill-Chu, horizontal tube). Much lower h<sub>o</sub> than boiling — typically 30 – 100 BTU/hr·ft²·°F.</li>
       <li><strong>Forced Annular Flow (Patil)</strong> — coil sits in the annulus between two concentric cylinders with single-phase fluid pumped through. h<sub>o</sub> from Patil/Shende/Ghosh 1982 (Chem. Eng., Dec 13). Useful for HCHE intercoolers, glycol coolers with pumped circulation, or process-heat-recovery vessels.</li>
-      <li><strong>Dry / Vapor — Non-Submerged</strong> — coil sits <em>above</em> the liquid level, exposed to saturated NH₃ vapor. h<sub>o</sub> from Churchill-Chu free convection to the vapor (ideal-gas β), typically only 2 – 5 BTU/hr·ft²·°F — roughly 100–250× below pool boiling, effectively insulation. Use to rate a non-submerged condition (e.g. customer asks for a dry rerate, or to bound boil-out duty). A dry coil delivers almost no subcooling.</li>
+      <li><strong>Dry / Vapor — Non-Submerged</strong> — coil sits <em>above</em> the liquid level, exposed to saturated refrigerant vapor. h<sub>o</sub> from Churchill-Chu free convection to the vapor (ideal-gas β), typically only 2 – 5 BTU/hr·ft²·°F for R-717 — orders of magnitude below pool boiling, effectively insulation. Use to rate a non-submerged condition (e.g. customer asks for a dry rerate, or to bound boil-out duty). A dry coil delivers almost no subcooling.</li>
     </ul>
-    <p class="typical">If you're unsure, the answer is almost always Pool-Boiling NH₃. Forced Annular is a different machine.</p>`
+    <p class="typical">If you're unsure, the answer is almost always Pool-Boiling. Forced Annular is a different machine.</p>`
   },
   annulus_B: {
     title: "Annulus <em>Inner Cylinder OD</em>",
@@ -2946,7 +3446,7 @@ For N_Re &gt; 10,000: Nu = 0.36·Re^0.55·Pr^(1/3)·(μ/μ_w)^0.14</p>
       <li><strong>Water</strong> — clean, c_p ≈ 1.0, k ≈ 0.36, freezes at 32 °F.</li>
       <li><strong>30% Ethylene Glycol</strong> — antifreeze; freeze point ≈ 5 °F. c_p ≈ 0.85, k ≈ 0.27.</li>
       <li><strong>Calcium-Chloride Brine</strong> — heavy-duty refrigeration secondary; c_p ≈ 0.75, k ≈ 0.32.</li>
-      <li><strong>Liquid NH₃ (subcooled)</strong> — NH₃ inside the annulus too; pumped recirculation systems.</li>
+      <li><strong>Liquid refrigerant (subcooled)</strong> — the selected refrigerant inside the annulus too; pumped recirculation systems.</li>
     </ul>`
   },
   helical_corr: {
@@ -2964,15 +3464,15 @@ For N_Re &gt; 10,000: Nu = 0.36·Re^0.55·Pr^(1/3)·(μ/μ_w)^0.14</p>
     body: `<p>The Sieder-Tate (μ/μ_w)^0.14 factor corrects h<sub>i</sub> for the difference between bulk fluid viscosity (at average T) and wall viscosity (near the wall T). For cooling, μ_w &gt; μ, so the correction is &lt; 1 — h<sub>i</sub> reduces slightly.</p>
     <p class="formula">h_i,corrected = h_i × (μ_bulk / μ_wall)^0.14</p>
     <ul>
-      <li><strong>Off (default)</strong> — assumes μ/μ_w ≈ 1. Fine for NH₃ where viscosity change is small (~5 %).</li>
+      <li><strong>Off (default)</strong> — assumes μ/μ_w ≈ 1. Fine for low-viscosity refrigerants like NH₃ where the change is small (~5 %).</li>
       <li><strong>On</strong> — applies the correction. Recommended for high-viscosity fluids (glycol, brine, oil) where wall and bulk viscosities differ &gt; 30 %.</li>
     </ul>
-    <p class="typical">For NH₃-NH₃ subcooler service, the correction is ≤ 2 %. For glycol going from 80 °F to 30 °F, it can be 10 – 15 %.</p>`
+    <p class="typical">For refrigerant-on-refrigerant subcooler service, the correction is typically ≤ 2 %. For glycol going from 80 °F to 30 °F, it can be 10 – 15 %.</p>`
   },
   vessel_id: {
     title: "Vessel <em>Inside Diameter</em>",
     body: `<p>The inside diameter of the cylindrical pressure vessel (the accumulator or intercooler shell) <strong>in inches</strong>. It sets the geometric envelope that the coil must fit inside.</p>
-    <p>This is the <em>ID</em>, not the outside diameter — i.e. the actual open bore that liquid ammonia occupies. For ASME-coded vessels, this is found on the U-1 / U-1A data sheet.</p>
+    <p>This is the <em>ID</em>, not the outside diameter — i.e. the actual open bore that liquid refrigerant occupies. For ASME-coded vessels, this is found on the U-1 / U-1A data sheet.</p>
     <p><strong>Coil winding C/L diameters are derived automatically from this value:</strong> the outermost winding sits 6″ inside the vessel wall (C/L = ID − 6″), and each subsequent winding is 6″ smaller still. For example a 47.25″ vessel with three windings gives C/L = 41.25″, 35.25″, 29.25″.</p>
     <p class="typical">Typical industrial accumulators: 36 in to 96 in ID. Intercoolers tend to run smaller (24 in to 48 in).</p>`
   },
@@ -2980,7 +3480,7 @@ For N_Re &gt; 10,000: Nu = 0.36·Re^0.55·Pr^(1/3)·(μ/μ_w)^0.14</p>
     title: "Minimum Radial <em>Clearance</em>",
     body: `<p>The smallest acceptable distance between the outer edge of the coil envelope and the inside vessel wall. This space is required for:</p>
     <ul>
-      <li><strong>Liquid recirculation</strong> — boiling ammonia must circulate freely around the coil to maintain nucleate boiling.</li>
+      <li><strong>Liquid recirculation</strong> — boiling refrigerant must circulate freely around the coil to maintain nucleate boiling.</li>
       <li><strong>Bubble release</strong> — vapor must escape upward without being trapped against the coil.</li>
       <li><strong>Fabrication tolerance</strong> — pipe ovality, weld bumps, and coil-to-vessel concentricity errors.</li>
     </ul>
@@ -3023,14 +3523,14 @@ For vessels ≤ 24″ ID: ASME B16.9 buttweld pipe caps (Table 10, length E).
     title: "Vessel <em>Type</em>",
     body: `<p>Sets the assumed shell-side boiling environment.</p>
     <ul>
-      <li><strong>Accumulator</strong> — flooded suction-side vessel; saturated liquid NH₃ at the suction pressure. The coil subcools HP liquid against this bath.</li>
+      <li><strong>Accumulator</strong> — flooded suction-side vessel; saturated liquid refrigerant at the suction pressure. The coil subcools HP liquid against this bath.</li>
       <li><strong>Intercooler</strong> — sits between compressor stages; boiling at intermediate pressure. Boiling tends to be more vigorous (higher heat flux, higher h<sub>o</sub>).</li>
     </ul>
     <p>The selection shifts the boiling-side correlation's bundle multiplier and the recommended over-surface margin.</p>`
   },
   liquid_level: {
     title: "Liquid <em>Level</em> in Vessel",
-    body: `<p>Percentage of the vessel's <strong>total interior height</strong> occupied by liquid ammonia during normal operation, as a level instrument or sight glass would read it. The coil must remain <em>fully submerged</em> below this level for the boiling-side h<sub>o</sub> assumption to hold.</p>
+    body: `<p>Percentage of the vessel's <strong>total interior height</strong> occupied by liquid refrigerant during normal operation, as a level instrument or sight glass would read it. The coil must remain <em>fully submerged</em> below this level for the boiling-side h<sub>o</sub> assumption to hold.</p>
     <p class="formula">total liquid column = (S/S + top dish + bottom dish) × level%
 liquid above bottom seam = total column − bottom dish
 (the bottom dish is always flooded first; "50% level" = bottom dish full + remaining liquid in the shell)</p>
@@ -3053,18 +3553,19 @@ liquid above bottom seam = total column − bottom dish
   },
   bath_temp: {
     title: "Bath <em>Temperature</em>",
-    body: `<p>The saturated ammonia temperature on the shell side — i.e. the suction temperature corresponding to the vessel's operating pressure. The coil cannot cool the liquid below this temperature; it can only <em>approach</em> it.</p>
-    <p class="formula">P_sat = f(T_bath)
+    body: `<p>The saturated refrigerant temperature on the shell side — i.e. the suction temperature corresponding to the vessel's operating pressure. The coil cannot cool the liquid below this temperature; it can only <em>approach</em> it.</p>
+    <p class="formula">P_sat = f(T_bath) — R-717 example:
 24 °F  ≈  52.6 psia
 0  °F  ≈  30.4 psia
-−20°F  ≈  18.3 psia</p>
-    <p class="typical">Typical NH₃ accumulator bath temperatures: <strong>−40 °F to +40 °F</strong> depending on service.</p>`
+−20°F  ≈  18.3 psia
+(use the Props tab to read P_sat for the selected refrigerant)</p>
+    <p class="typical">Typical accumulator bath temperatures: <strong>−40 °F to +40 °F</strong> depending on service. R-744 note: stay below its 87.8 °F critical point.</p>`
   },
   inlet_temp: {
     title: "Liquid <em>Inlet Temperature</em>",
     body: `<p>Temperature of the HP liquid entering the coil, in °F. For an HP receiver feed, this typically sits at or just below the condensing temperature.</p>
     <p>The app treats this stream as <strong>saturated liquid</strong> at this temperature for property look-ups (since the receiver liquid is at saturation by definition). If your receiver runs sub-cooled, the actual properties differ only slightly — the calculation is insensitive.</p>
-    <p class="typical">Typical HP liquid temperatures: <strong>70–95 °F</strong> for evaporative-condensed systems; up to 105 °F on the hottest design day.</p>`
+    <p class="typical">Typical HP liquid temperatures: <strong>70–95 °F</strong> for evaporative-condensed systems; up to 105 °F on the hottest design day. R-744 cannot exist as saturated liquid above its 87.8 °F critical point — HELIX clamps and warns if you exceed it.</p>`
   },
   pipe_size: {
     title: "Pipe <em>Size</em>",
@@ -3095,7 +3596,7 @@ coil_height = turns × pitch</p>
     title: "Fouling <em>Standard</em>",
     body: `<p>The fouling resistance applied to both sides of the tube, in <span style="font-family:'JetBrains Mono',monospace">hr·ft²·°F/BTU</span>.</p>
     <ul>
-      <li><strong>Industrial NH₃ (0.00025)</strong> — observed in well-maintained ammonia subcooler practice. Use for matching an existing reference design.</li>
+      <li><strong>Industrial refrigerant (0.00025)</strong> — observed in well-maintained ammonia subcooler practice; reasonable for clean halocarbon service too. Use for matching an existing reference design.</li>
       <li><strong>TEMA Clean (0.0005)</strong> — conservative for clean refrigerant service.</li>
       <li><strong>TEMA Fouled (0.001)</strong> — heavy oil entrainment or end-of-service-life condition.</li>
       <li><strong>Bare metal (0)</strong> — academic / brand-new coil only.</li>
@@ -3104,7 +3605,7 @@ coil_height = turns × pitch</p>
   },
   probe_temp: {
     title: "Probe <em>Temperature</em>",
-    body: `<p>Look up ammonia properties at any temperature you choose. Useful for sanity-checking inlet/outlet state assumptions, sizing relief valves, or estimating capacity at off-design conditions.</p>`
+    body: `<p>Look up properties of the selected refrigerant at any temperature you choose. Useful for sanity-checking inlet/outlet state assumptions, sizing relief valves, or estimating capacity at off-design conditions.</p>`
   },
   quality: {
     title: "Probe <em>Quality</em>",
@@ -3286,8 +3787,8 @@ function compute(I){
       // as a proxy for the wall T (within ~5% it's a good approximation).
       const T_wall_outer = 0.5 * (I.inlet_temp + T_out);
       const T_film_liq = 0.5 * (T_wall_outer + I.bath_temp);
-      const props_bath = nh3Sat(T_film_liq);
-      const beta_bath = nh3_beta_liquid(T_film_liq);
+      const props_bath = refSat(T_film_liq);
+      const beta_bath = refBetaLiquid(T_film_liq);
       const cc = h_natural_convection_cyl(T_wall_outer, I.bath_temp, OD, props_bath, beta_bath);
       h_o = Math.max(20, cc.h);
       h_o_submerged_diag = h_o;
@@ -3301,7 +3802,7 @@ function compute(I){
       // The entire coil is dry, so f_sub = 0 and there is no submerged term.
       const T_wall_outer_est = 0.5 * (I.inlet_temp + T_out);
       const T_film_vap = 0.5 * (T_wall_outer_est + I.bath_temp);
-      const props_vap = nh3SatVapor(T_film_vap);
+      const props_vap = refSatVapor(T_film_vap);
       const beta_vap  = 1 / (T_film_vap + 459.67);
       const cc_vap = h_natural_convection_cyl(T_wall_outer_est, I.bath_temp, OD, props_vap, beta_vap);
       h_o = Math.max(2, cc_vap.h);
@@ -3309,10 +3810,11 @@ function compute(I){
       h_o_submerged_diag = null;
       f_sub_diag = 0.0;
     } else {
-      // DEFAULT: Pool-boiling NH3 — T-dependent correlation
-      // (Calibrated to three industrial reference designs, -25 to +30 °F bath.
-      // The clamp 200..800 reflects the data range; see Patch C calibration banner.)
-      const h_o_pool = Math.max(200, Math.min(800, 3.6107*I.bath_temp + 409.19));
+      // DEFAULT: Pool-boiling refrigerant — R-717 field calibration × Mostinski
+      // fluid scaling, via the ONE shared poolBoilHo() implementation.
+      // (Calibrated to three industrial R-717 reference designs, -25 to +30 °F
+      // bath; clamp 200..800 reflects the data range — see calibration banner.)
+      const h_o_pool = poolBoilHo(I.bath_temp).h;
       h_o_submerged_diag = h_o_pool;
 
       // Patch B: partial-submergence correction.
@@ -3326,7 +3828,7 @@ function compute(I){
         // properties (NH3 vapor changes slowly with T).
         const T_wall_outer_est = 0.5 * (I.inlet_temp + T_out);
         const T_film_vap = 0.5 * (T_wall_outer_est + I.bath_temp);
-        const props_vap = nh3SatVapor(T_film_vap);
+        const props_vap = refSatVapor(T_film_vap);
         const beta_vap  = 1 / (T_film_vap + 459.67);
         const cc_vap = h_natural_convection_cyl(T_wall_outer_est, I.bath_temp, OD, props_vap, beta_vap);
         h_o_exposed_diag = Math.max(2, cc_vap.h);
@@ -3515,23 +4017,18 @@ function compute(I){
   const pitch_clearance = I.pitch - OD;
 
   // ─── Heat-flux check (industry-practical, not Zuber CHF) ──────────
-  // For plain-steel NH3 coils in industrial refrigeration, the practical
+  // For plain-steel R-717 coils in industrial refrigeration, the practical
   // heat-flux ceiling is ~10,000 BTU/hr·ft² (driven by film-coefficient
   // degradation, oil migration, and bubble entrainment) — far below the
-  // hydrodynamic CHF.  We report % of practical limit AND % of Zuber CHF.
-  const q_practical_limit = 10000;       // BTU/hr·ft²
+  // hydrodynamic CHF. Other refrigerants scale that limit by their Zuber-CHF
+  // ratio to NH3 (see fluxLimits). We report % of both ceilings.
+  const _fl = fluxLimits(I.bath_temp);
+  const q_practical_limit = _fl.q_practical;  // BTU/hr·ft²
   const flux_util = q_o/q_practical_limit*100;
 
-  // Zuber CHF (for reference only)
-  const sat = nh3Sat(I.bath_temp);
-  const hfg_SI = sat.h_fg * 2326;
-  const rho_g_SI = sat.rho_g * 16.0185;
-  const rho_l_SI = sat.rho_l * 16.0185;
-  const sigma_SI = sat.sigma_Nm;
-  const q_chf_SI = 0.131*hfg_SI*Math.pow(rho_g_SI, 0.5)
-                   *Math.pow(sigma_SI*9.81*(rho_l_SI - rho_g_SI), 0.25);
-  const q_chf = q_chf_SI*0.3170;
-  const chf_util = q_o/q_chf*100;
+  // Zuber CHF (for reference only) — property-driven, fluid-correct
+  const q_chf = _fl.q_chf;
+  const chf_util = q_o/Math.max(q_chf, 1)*100;
 
   return {
     T_out, Q, U_o, LMTD, V_fps, Re, h_i, h_o, q_o,
@@ -3563,8 +4060,8 @@ function compute(I){
     // Patch C — flash-margin check (only when user supplied inlet pressure)
     flash: (() => {
       if (I.inlet_pressure == null) return null;
-      const sat_in   = nh3Sat(I.inlet_temp).P_psia;        // psia at inlet T
-      const sat_out  = nh3Sat(T_out).P_psia;                // psia at outlet T
+      const sat_in   = refSat(I.inlet_temp).P_psia;        // psia at inlet T
+      const sat_out  = refSat(T_out).P_psia;                // psia at outlet T
       const P_in_psia  = I.inlet_pressure;
       const P_out_psia = Math.max(0.1, P_in_psia - dP_psi); // approx, ignores elevation
       return {
@@ -3636,7 +4133,8 @@ function readInputs(){
     inlet_temp: +$('inlet_temp').value,
     target_outlet: tgt === "" ? null : +tgt,
     inlet_pressure: (!inP || isNaN(+inP)) ? null : +inP,    // psia, optional
-    service:    'hp_liquid',        // always HP liquid NH₃ in this app
+    service:    'hp_liquid',        // HP liquid of the selected refrigerant
+    refrigerant: REF_KEY,           // active working fluid (global selector)
     pipe_size:  $('pipe_size').value,
     n_windings,
     winding_cls: cls,
@@ -3707,7 +4205,7 @@ function render(I, R){
   else { velBadge = "fail"; velLabel = "FAIL · HIGH"; }
   crits.push({
     name: "Velocity OK",
-    detail: `${fmt(R.V_fps,2)} ft/s · IIAR 3–7 ft/s (10 max)`,
+    detail: `${fmt(R.V_fps,2)} ft/s · liquid-line 3–7 ft/s (10 max${REF_KEY === 'R717' ? ', IIAR' : ''})`,
     badge: velBadge,
     text: velLabel
   });
@@ -3748,7 +4246,7 @@ function render(I, R){
   else { fluxBadge = "fail"; fluxLabel = "FAIL"; }
   crits.push({
     name: "Heat flux OK",
-    detail: `${fmt(R.q_o,0)} BTU/hr·ft² · ${fmt(R.flux_util,0)}% of 10k practical limit`,
+    detail: `${fmt(R.q_o,0)} BTU/hr·ft² · ${fmt(R.flux_util,0)}% of ${fmt(R.q_practical_limit/1000,1)}k practical limit`,
     badge: fluxBadge,
     text: fluxLabel
   });
@@ -3853,14 +4351,14 @@ function render(I, R){
   if (compEl){
     const Q_TR = R.Q / 12000;
     // Estimate vapor mass generation at the bath:  ṁ_vap = Q / h_fg
-    // (h_fg at bath saturation is the energy per lb of NH3 vaporized.)
-    const bathSat = nh3Sat(I.bath_temp);
+    // (h_fg at bath saturation is the energy per lb of refrigerant vaporized.)
+    const bathSat = refSat(I.bath_temp);
     const m_vap_lbhr = R.Q / Math.max(bathSat.h_fg, 1);
     const m_vap_lbmin = m_vap_lbhr / 60;
     compEl.style.display = 'block';
     compEl.innerHTML = `
       <strong style="font-style:normal;color:var(--frost-2)">⚡ Downstream load.</strong>
-      This ${Q_TR.toFixed(1)} TR (${R.Q.toLocaleString('en-US',{maximumFractionDigits:0})} Btu/hr) becomes additional <em>low-side load</em> on the compressor train — boiling ≈ ${m_vap_lbmin.toFixed(1)} lb/min of NH₃ vapor at the bath saturation pressure (${bathSat.P_psia.toFixed(0)} psia, h<sub>fg</sub> = ${bathSat.h_fg.toFixed(0)} Btu/lb). Verify the system has the compressor capacity to absorb it.
+      This ${Q_TR.toFixed(1)} TR (${R.Q.toLocaleString('en-US',{maximumFractionDigits:0})} Btu/hr) becomes additional <em>low-side load</em> on the compressor train — boiling ≈ ${m_vap_lbmin.toFixed(1)} lb/min of ${refShort()} vapor at the bath saturation pressure (${bathSat.P_psia.toFixed(0)} psia, h<sub>fg</sub> = ${bathSat.h_fg.toFixed(0)} Btu/lb). Verify the system has the compressor capacity to absorb it.
     `;
   }
 
@@ -3898,11 +4396,15 @@ function render(I, R){
         </div>`;
       }
 
+      const pbScale = poolBoilScale(T_bath);
+      const scaleNote = refIsNH3()
+        ? ''
+        : ` For ${refShort()}, that R-717 base is scaled by a Mostinski reduced-pressure ratio (×${pbScale.toFixed(2)} here) — an engineering estimate without field calibration; treat results accordingly.`;
       calib.style.display = 'block';
       calib.innerHTML = `
-        <div style="font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.18em;text-transform:uppercase;color:var(--brass);margin-bottom:8px">◇ Calibration scope · Pool-boiling NH₃</div>
+        <div style="font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.18em;text-transform:uppercase;color:var(--brass);margin-bottom:8px">◇ Calibration scope · Pool-boiling ${refShort()}</div>
         <div style="font-style:italic;color:var(--mute);margin-bottom:10px;font-size:13.5px">
-          The shell-side h<sub>o</sub> correlation is a linear fit calibrated to three industrial reference designs at bath T = −25 to +30 °F and heat flux 2,000–6,000 Btu/hr·ft². Outside this envelope the prediction extrapolates and uncertainty grows.
+          The shell-side h<sub>o</sub> correlation is a linear fit calibrated to three industrial R-717 reference designs at bath T = −25 to +30 °F and heat flux 2,000–6,000 Btu/hr·ft². Outside this envelope the prediction extrapolates and uncertainty grows.${scaleNote}
         </div>
         <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;font-size:13px">
           <div><span style="color:var(--mute)">Bath T (${T_bath} °F):</span> ${T_status}</div>
@@ -3915,7 +4417,7 @@ function render(I, R){
       calib.innerHTML = `
         <div style="font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.18em;text-transform:uppercase;color:var(--brass);margin-bottom:8px">◇ Shell-side mode · Free convection</div>
         <div style="font-style:italic;color:var(--mute);font-size:13.5px">
-          Shell-side h<sub>o</sub> = ${R.h_o.toFixed(0)} Btu/hr·ft²·°F via Churchill-Chu (1975) natural convection on a horizontal cylinder in a quiescent NH₃ pool. Valid for 10⁻⁵ ≤ Ra_D ≤ 10¹². No pool boiling assumed.
+          Shell-side h<sub>o</sub> = ${R.h_o.toFixed(0)} Btu/hr·ft²·°F via Churchill-Chu (1975) natural convection on a horizontal cylinder in a quiescent ${refShort()} pool. Valid for 10⁻⁵ ≤ Ra_D ≤ 10¹². No pool boiling assumed.
         </div>
       `;
     } else if (I.shell_mode === 'dry_vapor'){
@@ -3923,7 +4425,7 @@ function render(I, R){
       calib.innerHTML = `
         <div style="font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.18em;text-transform:uppercase;color:#c0700e;margin-bottom:8px">⚠ Shell-side mode · Dry / Vapor (non-submerged)</div>
         <div style="font-style:italic;color:var(--mute);font-size:13.5px">
-          Shell-side h<sub>o</sub> = ${R.h_o.toFixed(1)} Btu/hr·ft²·°F via Churchill-Chu free convection to saturated NH₃ <em>vapor</em> — the coil is treated as fully exposed above the liquid level. That is roughly 100–250× lower than the pool-boiling value and behaves like insulation, so subcooling collapses. A dry coil is appropriate for boil-out duty, <strong>not</strong> for subcooling; re-submerge the coil (raise the operating level or lengthen the vessel) to recover duty.
+          Shell-side h<sub>o</sub> = ${R.h_o.toFixed(1)} Btu/hr·ft²·°F via Churchill-Chu free convection to saturated ${refShort()} <em>vapor</em> — the coil is treated as fully exposed above the liquid level. That is orders of magnitude lower than the pool-boiling value and behaves like insulation, so subcooling collapses. A dry coil is appropriate for boil-out duty, <strong>not</strong> for subcooling; re-submerge the coil (raise the operating level or lengthen the vessel) to recover duty.
         </div>
       `;
     } else {
@@ -4341,11 +4843,15 @@ function renderGeometry(I, R){
 function renderProperties(I, R){
   const Tprobe = +$('probe_temp').value;
   const xprobe = +$('probe_q').value;
-  const s = nh3State(Tprobe, xprobe);
+  const s = refState(Tprobe, xprobe);
+  const glideRow = (s.glide_F || 0) > 0.5
+    ? `<div><span>T glide (dew−bubble)</span><span>${s.glide_F.toFixed(1)} °F</span></div>` : '';
   $('probe-grid').innerHTML = `
+    <div><span>Fluid</span><span>${refShort()}</span></div>
     <div><span>T</span><span>${Tprobe} °F</span></div>
     <div><span>x (quality)</span><span>${xprobe}</span></div>
-    <div><span>P sat</span><span>${s.P_psia.toFixed(1)} psia</span></div>
+    <div><span>P sat${s.glide_F > 0.5 ? ' (bubble)' : ''}</span><span>${s.P_psia.toFixed(1)} psia</span></div>
+    ${glideRow}
     <div><span>h<sub>f</sub></span><span>${s.h_f.toFixed(1)} BTU/lb</span></div>
     <div><span>h<sub>g</sub></span><span>${s.h_g.toFixed(1)} BTU/lb</span></div>
     <div><span>h<sub>fg</sub></span><span>${s.h_fg.toFixed(1)} BTU/lb</span></div>
@@ -4354,11 +4860,12 @@ function renderProperties(I, R){
     <div><span>c<sub>p</sub> liquid</span><span>${s.cp_l.toFixed(3)} BTU/lb·°F</span></div>
     <div><span>μ liquid</span><span>${s.mu_l.toFixed(3)} lb/ft·hr</span></div>
     <div><span>k liquid</span><span>${s.k_l.toFixed(3)} BTU/hr·ft·°F</span></div>
+    <div><span>Source</span><span>${propEngineLive() ? 'CoolProp' : 'ASHRAE poly'}</span></div>
   `;
 
-  const sIn = nh3Sat(I.inlet_temp);
-  const sOut = nh3Sat(R.T_out);
-  const sBath = nh3Sat(I.bath_temp);
+  const sIn = refSat(I.inlet_temp);
+  const sOut = refSat(R.T_out);
+  const sBath = refSat(I.bath_temp);
   $('state-grid').innerHTML = `
     <div><span>Inlet @ ${I.inlet_temp}°F · P<sub>sat</sub> (reference)</span><span>${sIn.P_psia.toFixed(1)} psia</span></div>
     <div><span>Inlet · h<sub>f</sub></span><span>${sIn.h_f.toFixed(1)} BTU/lb</span></div>
@@ -4539,8 +5046,9 @@ ${(() => {
 <h2><span class="num">01</span>Design Basis</h2>
 <div class="row">
   <div class="box">
-    <div class="kv"><span class="k">Service</span><span class="v">HP Liquid Ammonia (R-717)</span></div>
-    <div class="kv"><span class="k">Shell-side mode</span><span class="v">${I.shell_mode === 'pool_boil' ? 'Pool-Boiling NH₃' : I.shell_mode === 'forced_annular' ? 'Forced Annular (Patil)' : I.shell_mode === 'dry_vapor' ? 'Dry / Vapor — Non-Submerged' : 'Static Bath'}</span></div>
+    <div class="kv"><span class="k">Service</span><span class="v">HP Liquid ${refFullName()}</span></div>
+    <div class="kv"><span class="k">Shell-side mode</span><span class="v">${I.shell_mode === 'pool_boil' ? 'Pool-Boiling ' + refShort() : I.shell_mode === 'forced_annular' ? 'Forced Annular (Patil)' : I.shell_mode === 'dry_vapor' ? 'Dry / Vapor — Non-Submerged' : 'Static Bath'}</span></div>
+    <div class="kv"><span class="k">Property engine</span><span class="v">${propSourceLabel()}</span></div>
     <div class="kv"><span class="k">Vessel ID × S/S</span><span class="v">${I.vessel_id} in × ${I.vessel_ss} in</span></div>
     <div class="kv"><span class="k">Bath temperature</span><span class="v">${I.bath_temp} °F</span></div>
     <div class="kv"><span class="k">Inlet temperature</span><span class="v">${I.inlet_temp} °F</span></div>
@@ -4557,7 +5065,7 @@ ${(() => {
 </div>
 
 <h2><span class="num">02</span>Tube-Side · h<sub>i</sub></h2>
-<div class="reasoning">NH₃ properties at film T<sub>avg</sub> = ${T_avg.toFixed(1)} °F from ASHRAE-calibrated polynomials. Single continuous flow path carries full mass flow.</div>
+<div class="reasoning">${refShort()} properties at film T<sub>avg</sub> = ${T_avg.toFixed(1)} °F from ${propEngineLive() ? 'CoolProp (Helmholtz EOS)' : 'ASHRAE-calibrated polynomials'}. Single continuous flow path carries full mass flow.</div>
 <div class="formula">G = ṁ/A<sub>flow</sub> = ${(I.mass_flow*60).toFixed(0)}/${(Math.PI/4*Math.pow(R.ID/12,2)).toFixed(5)}  =  <span class="ans">${G_calc.toFixed(0)}</span> lb/hr·ft²
 V = G/(ρ·3600) = ${G_calc.toFixed(0)}/(${R.props.rho_l.toFixed(2)}×3600)  =  <span class="ans">${R.V_fps.toFixed(2)} ft/s</span>
 Re = G·D<sub>i</sub>/μ = ${G_calc.toFixed(0)}×${(R.ID/12).toFixed(4)}/${R.props.mu_l.toFixed(3)}  =  <span class="ans">${fmt(R.Re,0)}</span>     Pr = c<sub>p</sub>·μ/k  =  <span class="ans">${Pr}</span></div>
@@ -4566,8 +5074,8 @@ Re = G·D<sub>i</sub>/μ = ${G_calc.toFixed(0)}×${(R.ID/12).toFixed(4)}/${R.pro
 h<sub>i</sub> = Nu·k/D<sub>i</sub> = ${Nu_calc.toFixed(1)}×${R.props.k_l.toFixed(4)}/${(R.ID/12).toFixed(4)}  =  <span class="ans">${fmt(R.h_i,0)} BTU/hr·ft²·°F</span></div>
 
 <h2><span class="num">03</span>Shell-Side · h<sub>o</sub></h2>
-<div class="reasoning">${I.shell_mode === 'pool_boil' ? 'Pool-boiling NH₃ on plain-steel horizontal tubes. Empirical correlation linear in bath temperature, calibrated to three industrial reference designs spanning bath T = −20 °F to +30 °F, reproducing each within ±0.3 °F outlet temperature.' : I.shell_mode === 'forced_annular' ? 'Patil/Shende/Ghosh 1982 (Chem. Eng. Dec 13) annular HCHE correlation. Shell fluid forced through annulus between cylinders B and C, crossing the helical coil.' : I.shell_mode === 'dry_vapor' ? 'Dry / non-submerged rating per customer request: the coil is treated as fully exposed above the liquid level, transferring heat by free convection to saturated NH₃ <em>vapor</em> (Churchill-Chu horizontal cylinder, ideal-gas β = 1/T<sub>abs</sub>). Vapor-side h<sub>o</sub> is ~100–250× below the pool-boiling value, so it dominates the resistance network and subcooling is minimal. This rating is conservative for sizing.' : 'Free convection on horizontal tube in a static bath. Conservative typical value; field verification recommended.'}</div>
-<div class="formula">${I.shell_mode === 'pool_boil' ? `h<sub>o</sub> = 3.6107·T<sub>bath</sub> + 409.19 = 3.6107×${I.bath_temp} + 409.19  =  <span class="ans">${fmt(R.h_o,0)} BTU/hr·ft²·°F</span>` : I.shell_mode === 'dry_vapor' ? `h<sub>o</sub> = Churchill-Chu free convection to NH₃ vapor (β = 1/T<sub>abs</sub>)  =  <span class="ans">${fmt(R.h_o,1)} BTU/hr·ft²·°F</span>` : `h<sub>o</sub>  =  <span class="ans">${fmt(R.h_o,0)} BTU/hr·ft²·°F</span>  (${I.shell_mode})`}</div>
+<div class="reasoning">${I.shell_mode === 'pool_boil' ? 'Pool-boiling ' + refShort() + ' on plain-steel horizontal tubes. Empirical correlation linear in bath temperature, calibrated to three industrial R-717 reference designs spanning bath T = −20 °F to +30 °F (±0.3 °F outlet)' + (refIsNH3() ? '.' : ', scaled ×' + poolBoilScale(I.bath_temp).toFixed(2) + ' for ' + refShort() + ' by Mostinski reduced-pressure ratio — an uncalibrated engineering estimate.') : I.shell_mode === 'forced_annular' ? 'Patil/Shende/Ghosh 1982 (Chem. Eng. Dec 13) annular HCHE correlation. Shell fluid forced through annulus between cylinders B and C, crossing the helical coil.' : I.shell_mode === 'dry_vapor' ? 'Dry / non-submerged rating per customer request: the coil is treated as fully exposed above the liquid level, transferring heat by free convection to saturated ' + refShort() + ' <em>vapor</em> (Churchill-Chu horizontal cylinder, ideal-gas β = 1/T<sub>abs</sub>). Vapor-side h<sub>o</sub> is far below the pool-boiling value, so it dominates the resistance network and subcooling is minimal. This rating is conservative for sizing.' : 'Free convection on horizontal tube in a static bath. Conservative typical value; field verification recommended.'}</div>
+<div class="formula">${I.shell_mode === 'pool_boil' ? `h<sub>o</sub> = clamp(200…800, 3.6107·T<sub>bath</sub> + 409.19)${refIsNH3() ? '' : ` × ${poolBoilScale(I.bath_temp).toFixed(3)} (Mostinski, ${refShort()}/R-717)`}  =  <span class="ans">${fmt(R.h_o,0)} BTU/hr·ft²·°F</span>` : I.shell_mode === 'dry_vapor' ? `h<sub>o</sub> = Churchill-Chu free convection to ${refShort()} vapor (β = 1/T<sub>abs</sub>)  =  <span class="ans">${fmt(R.h_o,1)} BTU/hr·ft²·°F</span>` : `h<sub>o</sub>  =  <span class="ans">${fmt(R.h_o,0)} BTU/hr·ft²·°F</span>  (${I.shell_mode})`}</div>
 
 <h2><span class="num">04</span>Overall U<sub>o</sub></h2>
 <div class="reasoning">Series resistance network, all referenced to outside surface area.</div>
@@ -4592,7 +5100,7 @@ LMTD = [(${I.inlet_temp}−${I.bath_temp})−(${R.T_out.toFixed(2)}−${I.bath_t
 A<sub>o</sub> = π·D<sub>o</sub>·L = π×${(R.OD/12).toFixed(4)}×${I.length}  =  <span class="ans">${R.A_o.toFixed(1)} ft²</span>
 Q = U·A·LMTD = ${fmt(R.U_o,1)}×${R.A_o.toFixed(1)}×${R.LMTD.toFixed(2)}  =  <span class="ans">${fmt(R.Q,0)} BTU/hr  (${(R.Q/12000).toFixed(2)} TR)</span>
 Check: ṁ·c<sub>p</sub>·ΔT = ${(I.mass_flow*60).toFixed(0)}×${R.props.cp_l.toFixed(3)}×${(I.inlet_temp-R.T_out).toFixed(2)}  =  <span class="ans">${fmt(I.mass_flow*60*R.props.cp_l*(I.inlet_temp-R.T_out),0)} BTU/hr</span> ✓</div>
-${I.shell_mode === 'dry_vapor' ? `<div class="reasoning" style="background:#fff3e0;border-left:3px solid #c0700e;padding:8px 12px;margin-top:6px;font-style:normal"><strong style="color:#c0700e">NOTE — dry service.</strong> Rated with the coil fully exposed to saturated NH₃ vapor, independent of liquid level (submergence figures in §07 are geometric only and impose no requirement). Any liquid contact in operation raises h<sub>o</sub> far above the vapor value, so the stated subcooling is a floor; performance with partial liquid coverage will exceed it.</div>` : R.net_submergence_in < 0 ? `<div class="reasoning" style="background:#fff3e0;border-left:3px solid #c0700e;padding:8px 12px;margin-top:6px;font-style:normal"><strong style="color:#c0700e">CAVEAT — partial submergence.</strong> Net submergence = ${R.net_submergence_in.toFixed(1)} in (after swell). The pool-boiling h<sub>o</sub> correlation assumes the entire coil surface is submerged in saturated liquid. With the coil top above NLL, the upper turns boil weakly or run dry, h<sub>o</sub> drops sharply on that section, and the actual outlet will be <em>warmer</em> than the value above. Re-run with reduced effective area or with the vessel re-sized for full submergence before issuing for fabrication.</div>` : ''}
+${I.shell_mode === 'dry_vapor' ? `<div class="reasoning" style="background:#fff3e0;border-left:3px solid #c0700e;padding:8px 12px;margin-top:6px;font-style:normal"><strong style="color:#c0700e">NOTE — dry service.</strong> Rated with the coil fully exposed to saturated ${refShort()} vapor, independent of liquid level (submergence figures in §07 are geometric only and impose no requirement). Any liquid contact in operation raises h<sub>o</sub> far above the vapor value, so the stated subcooling is a floor; performance with partial liquid coverage will exceed it.</div>` : R.net_submergence_in < 0 ? `<div class="reasoning" style="background:#fff3e0;border-left:3px solid #c0700e;padding:8px 12px;margin-top:6px;font-style:normal"><strong style="color:#c0700e">CAVEAT — partial submergence.</strong> Net submergence = ${R.net_submergence_in.toFixed(1)} in (after swell). The pool-boiling h<sub>o</sub> correlation assumes the entire coil surface is submerged in saturated liquid. With the coil top above NLL, the upper turns boil weakly or run dry, h<sub>o</sub> drops sharply on that section, and the actual outlet will be <em>warmer</em> than the value above. Re-run with reduced effective area or with the vessel re-sized for full submergence before issuing for fabrication.</div>` : ''}
 
 <h2><span class="num">06</span>Pressure Drop</h2>
 <div class="reasoning">Ito (1959) helical-turbulent friction factor over the full ${R.L_hydraulic_ft.toFixed(0)} ft of continuous pipe path.</div>
@@ -4641,7 +5149,7 @@ ${I.shell_mode === 'dry_vapor' ? `<div class="reasoning" style="background:#fff3
   <div class="verdict ${R.pitch_clearance >= 1.0 ? 'pass' : R.pitch_clearance >= 0.5 ? 'warn' : 'fail'}"><div class="name">Pitch Gap</div><div class="text">${R.pitch_clearance.toFixed(2)} in</div></div>
 </div>
 
-<div class="note"><b style="color:#3a2e15">Methodology:</b> Tube-side h<sub>i</sub> via Dittus-Boelter + ${I.helical_corr} helical correction, Sieder-Tate viscosity correction ${I.visc_corr}. Shell-side h<sub>o</sub> via ${I.shell_mode === 'pool_boil' ? 'pool-boiling NH₃ correlation calibrated to three industrial reference designs (±0.3 °F)' : I.shell_mode === 'forced_annular' ? 'Patil/Shende/Ghosh 1982 annular flow correlation' : I.shell_mode === 'dry_vapor' ? 'Churchill-Chu free convection to saturated NH₃ vapor (coil treated as fully exposed / non-submerged)' : 'free-convection estimate'}. Pressure drop via Ito helical-turbulent. NH₃ properties from polynomial fits to ASHRAE 2017 tables, &lt;1% error. Validity: bath −25 °F to +50 °F; HP liquid 50 °F to 110 °F.</div>
+<div class="note"><b style="color:#3a2e15">Methodology:</b> Tube-side h<sub>i</sub> via Dittus-Boelter + ${I.helical_corr} helical correction, Sieder-Tate viscosity correction ${I.visc_corr}. Shell-side h<sub>o</sub> via ${I.shell_mode === 'pool_boil' ? 'pool-boiling correlation calibrated to three industrial R-717 reference designs (±0.3 °F)' + (refIsNH3() ? '' : ', Mostinski-scaled for ' + refShort()) : I.shell_mode === 'forced_annular' ? 'Patil/Shende/Ghosh 1982 annular flow correlation' : I.shell_mode === 'dry_vapor' ? 'Churchill-Chu free convection to saturated ' + refShort() + ' vapor (coil treated as fully exposed / non-submerged)' : 'free-convection estimate'}. Pressure drop via Ito helical-turbulent. ${refShort()} properties from ${propEngineLive() ? 'CoolProp (Helmholtz-EOS, REFPROP-grade)' : 'polynomial fits to ASHRAE 2017 tables, &lt;1% error'}. R-717 calibration validity: bath −25 °F to +50 °F; HP liquid 50 °F to 110 °F.</div>
 
 <div class="signature">
   <div class="sig-block">
@@ -4652,7 +5160,7 @@ ${I.shell_mode === 'dry_vapor' ? `<div class="reasoning" style="background:#fff3
   </div>
 </div>
 
-<div class="footer">HELIX · Ammonia Coil Engineering Atelier · Calibrated to 3 industrial reference designs ±0.2°F</div>
+<div class="footer">HELIX · Refrigerant Coil Engineering Atelier · ${refFullName()} · R-717 calibration: 3 industrial reference designs ±0.2°F</div>
 </div></body></html>`;
 
   const win = window.open('', '_blank', 'width=900,height=1100,scrollbars=yes');
@@ -5461,6 +5969,7 @@ function runSweep(){
 
 function recompute(){
   try {
+    PROP_WARN.clear();
     const I = readInputs();
     // Show/hide the annular block based on shell_mode
     const annBlock = document.getElementById('annular-block');
@@ -5479,6 +5988,7 @@ function recompute(){
     const R = compute(I);
     render(I, R);
     updateStandardMatch(I);
+    renderPropWarnings('prop-warnings-subcooler');
   } catch(e){ console.error(e); }
 }
 
@@ -5517,13 +6027,13 @@ function recompute(){
 const BOILOUT_PRESETS = {
   oil_boilout: {
     label: 'Oil Boil-out',
-    description: 'Periodic warm-up to vaporize entrained NH₃ and carry compressor oil out of the accumulator to a separator.',
+    description: 'Periodic warm-up to vaporize entrained refrigerant and carry compressor oil out of the accumulator to a separator.',
     defaults: {
       fluid: 'hp_liquid',
       coil_inlet_temp: 90,    // warm receiver liquid (HP from condenser)
       coil_mass_flow: 180,    // lb/min — lands ~3.3 ft/s in 2" Sch 40
       initial_bath_temp: 23,  // suction T at start
-      target_bath_temp: 45,   // raise enough to vaporize light NH3 fraction
+      target_bath_temp: 45,   // raise enough to vaporize the light refrigerant fraction
       ambient_temp: 70,
       heat_loss_U: 0.05,      // Btu/hr·ft²·°F — reasonable insulated vessel
     },
@@ -5533,7 +6043,7 @@ const BOILOUT_PRESETS = {
   defrost: {
     label: 'Defrost / Bath Warm-up',
     description: 'Heat the bath to thaw frost on adjacent equipment or warm the bath in advance of a load transient.',
-    physics_note: 'Hot-gas defrost predictions assume single-phase vapor convection on the tube side. In reality, hot discharge gas condenses on the inner wall, giving h_i ~5–10× higher than the model predicts. Actual cycle times will be 30–50% FASTER than HELIX shows — predictions are conservative for sizing.',
+    physics_note: 'Hot-gas defrost predictions assume single-phase vapor convection on the tube side. In reality, hot discharge gas condenses on the inner wall, giving h_i several-fold higher than the model predicts (R-717 experience: ~5–10×, cycle 30–50% faster; condensing enhancement varies by refrigerant). Predictions are conservative for sizing.',
     defaults: {
       fluid: 'hot_gas',
       coil_inlet_temp: 180,   // hot-gas discharge typical
@@ -5563,10 +6073,11 @@ const BOILOUT_PRESETS = {
   }
 };
 
-const BOILOUT_FLUID_LABEL = {
-  hp_liquid: 'HP Liquid NH₃ (warm receiver)',
-  hot_gas:   'Hot Gas NH₃ (compressor discharge)'
-};
+function boilout_fluid_label(fluid){
+  if (fluid === 'hp_liquid') return 'HP Liquid ' + refShort() + ' (warm receiver)';
+  if (fluid === 'hot_gas')   return 'Hot Gas ' + refShort() + ' (compressor discharge)';
+  return fluid;
+}
 
 
 /* ─── 4.2 Boil-out input gathering ──────────────────────────────────── */
@@ -5595,6 +6106,7 @@ function boilout_readInputs(){
     // Process / boil-out specific
     preset:           $('bo_preset').value,
     fluid:            $('bo_fluid').value,
+    refrigerant:      REF_KEY,
     coil_inlet_temp:  +$('bo_inlet_temp').value,
     coil_mass_flow:   +$('bo_mass_flow').value,
     initial_bath_temp:+$('bo_init_bath').value,
@@ -5622,7 +6134,8 @@ function boilout_readInputs(){
 /* Transient simulation of bath temperature over time. At each step:
    1. Compute current LMTD from T_bath(t)
    2. Look up coil-side film properties at T_avg = (T_in + T_out)/2
-      using the SELECTED heating fluid (HP liquid NH3 or hot gas NH3)
+      using the SELECTED heating fluid (HP liquid or hot gas of the
+      active refrigerant, via the CoolProp engine)
    3. Run tube-side h_i (Dittus-Boelter + Schmidt helical)
    4. Run shell-side h_o (pool boiling, calibration warning if extrapolated)
    5. Form U_o, hence Q(t) and T_out_coil(t)
@@ -5646,10 +6159,10 @@ function boilout_compute(I){
 
   const m_per_lbh = I.coil_mass_flow * 60;    // lb/hr total through coil
 
-  // Bath inventory (mass of liquid NH3 in the vessel at current level)
-  // Density used: liquid NH3 at the initial bath T (will change slightly
+  // Bath inventory (mass of liquid refrigerant in the vessel at current level)
+  // Density used: saturated liquid at the initial bath T (will change slightly
   // as the bath warms, but inventory is dominated by volume × geometry).
-  const initBathProps = nh3Sat(I.initial_bath_temp);
+  const initBathProps = refSat(I.initial_bath_temp);
   const inv = vesselLiquidInventory(I.vessel_id, I.vessel_ss, I.liquid_level, initBathProps.rho_l);
   const M_bath = inv.mass_lb;  // lb
 
@@ -5681,9 +6194,10 @@ function boilout_compute(I){
       // (n=0.3 cooling, n=0.4 heating, both Dittus-Boelter.)
       const Nu = 0.023 * Math.pow(Re, 0.8) * Math.pow(Pr, 0.3) * f_helix;
       const h_i = Nu * props.k_l / (ID/12);
-      // Shell-side h_o (pool boiling, same correlation as subcooler, used here
-      // in heat-OUT-of-coil direction — symmetric physics).
-      const h_o = 3.6107 * T_bath + 409.19;
+      // Shell-side h_o (pool boiling — the SAME shared fluid-aware function as
+      // the subcooler, used here in heat-OUT-of-coil direction; also unifies
+      // the previously-unclamped inline copy with the clamped 200-800 base).
+      const h_o = poolBoilHo(T_bath).h;
       // Overall U_o (series resistance, referenced to outer surface)
       const ratio = OD / ID;
       const inv_U = ratio / h_i + ratio * I.fouling + R_wall + I.fouling + 1/h_o;
@@ -5719,7 +6233,7 @@ function boilout_compute(I){
     const Pr = props.cp_l * props.mu_l / props.k_l;
     const Nu = 0.023 * Math.pow(Re, 0.8) * Math.pow(Pr, 0.3) * f_helix;
     const h_i = Nu * props.k_l / (ID/12);
-    const h_o = 3.6107 * T_bath + 409.19;
+    const h_o = poolBoilHo(T_bath).h;
     return { T_bath, T_out_coil: s.T_out_coil, Q: s.Q, U_o: s.U_o,
              props, V_fps, Re, Pr, Nu, h_i, h_o, f_helix };
   }
@@ -5742,7 +6256,7 @@ function boilout_compute(I){
   const sample_interval_sec = 10;
 
   while (t < t_max_sec){
-    const cp_bath = nh3Sat(T_bath).cp_l;  // bath cp at current T
+    const cp_bath = refSat(T_bath).cp_l;  // bath cp at current T
     const s = stepProps(I.coil_inlet_temp, T_bath);
     const Q = s.Q;                         // Btu/hr
     const Q_loss = I.heat_loss_U * A_shell * Math.max(0, T_bath - I.ambient_temp);
@@ -5828,15 +6342,17 @@ function boilout_compute(I){
   // The rate is the FULLY-SUBMERGED (best-case) value; as the level drops the
   // coil uncovers, h_o collapses on the exposed turns, and the real rate
   // falls — so the time-to-empty is a lower-bound estimate, flagged as such.
-  const boilSat   = nh3Sat(final_state.T_bath);
+  const boilSat   = refSat(final_state.T_bath);
   const Q_boil    = final_state.Q;                                  // Btu/hr at plateau
   const Q_loss_bo = I.heat_loss_U * A_shell * Math.max(0, final_state.T_bath - I.ambient_temp);
   const Q_net_bo  = Math.max(0, Q_boil - Q_loss_bo);                // heat available to vaporize
   const h_fg_bath = Math.max(boilSat.h_fg, 1);                      // Btu/lb
-  const boiloff_lbhr   = Q_net_bo / h_fg_bath;                      // lb/hr NH3 vaporized
+  const boiloff_lbhr   = Q_net_bo / h_fg_bath;                      // lb/hr refrigerant vaporized
   const boiloff_lbmin  = boiloff_lbhr / 60;
   // Vapor volumetric rate at saturation (check against relief/vent line).
-  const rho_v_bath = boilSat.rho_v || nh3SatVapor(final_state.T_bath).rho_v || 0.04;
+  // (refSat now carries a real rho_v — the old `boilSat.rho_v || … || 0.04`
+  //  chain always fell through to the 0.04 lb/ft³ NH3-ish constant.)
+  const rho_v_bath = boilSat.rho_v || 0.04;
   const vapor_acfm = rho_v_bath > 0 ? (boiloff_lbhr / rho_v_bath) / 60 : 0;   // ft³/min at pool P
   // Time to boil the vessel dry from the starting liquid charge.
   const time_to_empty_hr  = boiloff_lbhr > 1e-6 ? M_bath / boiloff_lbhr : Infinity;
@@ -5876,7 +6392,8 @@ function boilout_compute(I){
   return {
     // Process
     fluid: I.fluid,
-    fluid_label: BOILOUT_FLUID_LABEL[I.fluid],
+    fluid_label: boilout_fluid_label(I.fluid),
+    refrigerant: REF_KEY,
     T_in_coil: I.coil_inlet_temp,
     T_init_bath: I.initial_bath_temp,
     T_target_bath: I.target_bath_temp,
@@ -5997,7 +6514,7 @@ function boilout_render(I, R){
     const v_init = R.init.V_fps;
     const fluid_v_check = R.fluid === 'hot_gas'
       ? (v_init >= 15 && v_init <= 80 ? '✓ in 15–80 ft/s gas range' : v_init < 15 ? '⚠ below 15 ft/s gas range' : '⚠ above 80 ft/s gas range')
-      : (v_init >= 3 && v_init <= 7 ? '✓ in 3–7 ft/s IIAR range' : v_init < 3 ? '⚠ below 3 ft/s IIAR range' : '⚠ above 7 ft/s IIAR range');
+      : (v_init >= 3 && v_init <= 7 ? '✓ in 3–7 ft/s liquid-line range' : v_init < 3 ? '⚠ below 3 ft/s liquid-line range' : '⚠ above 7 ft/s liquid-line range');
     grid.innerHTML = `
       <div class="metric accent"><div class="lbl">Cycle Time</div><div class="val">${R.reached_target ? R.cycle_min.toFixed(1) : '—'}<span class="u">min</span></div></div>
       <div class="metric"><div class="lbl">Total Energy</div><div class="val">${R.total_energy_btu.toLocaleString('en-US',{maximumFractionDigits:0})}<span class="u">Btu</span></div></div>
@@ -6008,7 +6525,7 @@ function boilout_render(I, R){
       <div class="metric"><div class="lbl">Coil Outlet (start → end)</div><div class="val">${R.init.T_out_coil.toFixed(0)}→${R.final.T_out_coil.toFixed(0)}<span class="u">°F</span></div></div>
       <div class="metric"><div class="lbl">Reynolds (start)</div><div class="val">${(R.init.Re/1000).toFixed(0)}<span class="u">k</span></div></div>
       <div class="metric"><div class="lbl">Overall U₀ (start)</div><div class="val">${R.init.U_o.toFixed(0)}<span class="u">Btu/hr·ft²·°F</span></div></div>
-      <div class="metric"><div class="lbl">Bath Inventory</div><div class="val">${R.bath_mass_lb.toFixed(0)}<span class="u">lb NH₃</span></div></div>
+      <div class="metric"><div class="lbl">Bath Inventory</div><div class="val">${R.bath_mass_lb.toFixed(0)}<span class="u">lb ${refShort()}</span></div></div>
       <div class="metric accent"><div class="lbl">Boil-Off Rate</div><div class="val">${R.boiloff_lbmin.toFixed(1)}<span class="u">lb/min</span></div></div>
       <div class="metric"><div class="lbl">Time to Boil Dry</div><div class="val">${isFinite(R.time_to_empty_min) ? R.time_to_empty_min.toFixed(0) : '—'}<span class="u">min</span></div></div>
       <div class="metric"><div class="lbl">Vapor Generation</div><div class="val">${R.vapor_acfm.toFixed(0)}<span class="u">ACFM</span></div></div>
@@ -6027,7 +6544,7 @@ function boilout_render(I, R){
   if (calib){
     if (R.extrapolated_fraction > 0.05 && R.reached_target){
       calib.style.display = 'block';
-      calib.innerHTML = `<strong style="color:#c0700e">Calibration caveat.</strong> ${(R.extrapolated_fraction*100).toFixed(0)}% of the cycle ran with bath T above +30 °F, which extrapolates the shell-side pool-boiling correlation beyond its calibrated range. Confidence: moderate. Recommend validating against measured cycle time on the first installation before relying on this prediction for production sizing.`;
+      calib.innerHTML = `<strong style="color:#c0700e">Calibration caveat.</strong> ${(R.extrapolated_fraction*100).toFixed(0)}% of the cycle ran with bath T above +30 °F, which extrapolates the shell-side pool-boiling correlation beyond its R-717-calibrated range${refIsNH3() ? '' : ' (already an uncalibrated Mostinski-scaled estimate for ' + refShort() + ')'}. Confidence: moderate. Recommend validating against measured cycle time on the first installation before relying on this prediction for production sizing.`;
     } else {
       calib.style.display = 'none';
     }
@@ -6209,26 +6726,28 @@ function boilout_renderGeometry(I, R){
 }
 
 
-/* NH3 Props tab — probe table + bath/inlet/outlet states at start & end of cycle. */
+/* Refrigerant Props tab — probe table + bath/inlet/outlet states at start & end of cycle. */
 function boilout_renderProperties(I, R){
   const Tprobe = +(document.getElementById('bo_probe_temp')?.value || 0);
   const qSel = document.getElementById('bo_probe_q')?.value || '0';
+  const engine = propEngineLive() ? 'CoolProp' : 'ASHRAE 2017 poly';
 
   let state, label, src;
   if (qSel === '0'){
-    state = nh3Sat(Tprobe);
-    label = 'Saturated Liquid NH₃';
-    src = 'nh3Sat() · ASHRAE 2017';
+    state = refSat(Tprobe);
+    label = 'Saturated Liquid ' + refShort();
+    src = 'refSat() · ' + engine;
   } else if (qSel === '1'){
-    state = nh3SatVapor(Tprobe);
-    label = 'Saturated Vapor NH₃';
-    src = 'nh3SatVapor() · ASHRAE 2017';
+    state = refSatVapor(Tprobe);
+    label = 'Saturated Vapor ' + refShort();
+    src = 'refSatVapor() · ' + engine;
   } else {
-    // Hot discharge gas — use the same hot_gas property model HELIX uses
-    // internally (single-phase superheated vapor at ~170 psia).
-    state = (typeof serviceProps === 'function') ? serviceProps('hot_gas', Tprobe) : nh3SatVapor(Tprobe);
-    label = 'Hot Discharge Gas (~170 psia)';
-    src = 'serviceProps("hot_gas") · single-phase vapor';
+    // Hot discharge gas — the same hot_gas property model HELIX uses
+    // internally (single-phase superheated vapor at the fluid's typical
+    // discharge pressure).
+    state = refHotGas(Tprobe);
+    label = 'Hot Discharge Gas (~' + (state.P_psia || 170).toFixed(0) + ' psia)';
+    src = 'refHotGas() · ' + engine;
   }
 
   const probeEl = document.getElementById('bo-probe-grid');
@@ -6246,8 +6765,8 @@ function boilout_renderProperties(I, R){
   }
 
   // Bath start/end + tube inlet & outlet at start of cycle (peak Q point)
-  const bath0 = nh3Sat(R.T_init_bath);
-  const bathF = nh3Sat(R.T_target_bath);
+  const bath0 = refSat(R.T_init_bath);
+  const bathF = refSat(R.T_target_bath);
   const stateEl = document.getElementById('bo-state-grid');
   if (stateEl){
     stateEl.innerHTML = `
@@ -6264,7 +6783,7 @@ function boilout_renderProperties(I, R){
   const caveatEl = document.getElementById('bo-props-caveat');
   if (caveatEl){
     caveatEl.innerHTML = `
-      <strong style="color:var(--paper);font-style:normal">Notes.</strong> The bath state changes continuously during the cycle as T<sub>bath</sub> rises from ${R.T_init_bath.toFixed(1)} °F to ${R.T_target_bath.toFixed(1)} °F. Pool-boiling shell-side h<sub>o</sub> is updated each integration step using the current bath T (calibration: −25 to +30 °F). When bath T exceeds the calibrated range, the duty estimate is an extrapolation — see the calibration banner on the Sizer tab for the fraction of cycle time spent above the calibration ceiling.
+      <strong style="color:var(--paper);font-style:normal">Notes.</strong> The bath state changes continuously during the cycle as T<sub>bath</sub> rises from ${R.T_init_bath.toFixed(1)} °F to ${R.T_target_bath.toFixed(1)} °F. Pool-boiling shell-side h<sub>o</sub> is updated each integration step using the current bath T (R-717 calibration: −25 to +30 °F${refIsNH3() ? '' : '; Mostinski-scaled for ' + refShort()}). When bath T exceeds the calibrated range, the duty estimate is an extrapolation — see the calibration banner on the Sizer tab for the fraction of cycle time spent above the calibration ceiling.
     `;
   }
 }
@@ -6382,7 +6901,10 @@ function boilout_renderVerdict(I, R){
   const sub_pass = R.net_submergence_in >= 0;
   const clear_pass = R.vessel_radial_clear >= I.clearance;
   const pitch_pass = R.pitch_clearance >= 0.5;
-  const flux_pass = R.peak_flux < 10000;  // generous limit for heating direction (cf. ~2000 limit for subcooling)
+  // Generous heating-direction limit (cf. ~2000 for subcooling); 10,000 is
+  // R-717 plain-steel practice, scaled per fluid by the Zuber-CHF ratio.
+  const flux_limit = fluxLimits(I.initial_bath_temp).q_practical;
+  const flux_pass = R.peak_flux < flux_limit;
 
   const envelope = R.preset_envelope;
   const time_pass = R.reached_target && envelope &&
@@ -6446,8 +6968,8 @@ function boilout_renderVerdict(I, R){
         `${R.coil_height_in.toFixed(1)} in tall · ${R.vessel_ss_in.toFixed(0)} in S/S available`,
         tri(R.coil_height_in <= R.vessel_ss_in*0.95, R.coil_height_in <= R.vessel_ss_in)) +
     row('Peak Heat Flux',
-        `${R.peak_flux.toFixed(0)} Btu/hr·ft² · guideline < 10,000 (heating)`,
-        tri(R.peak_flux < 8000, R.peak_flux < 10000));
+        `${R.peak_flux.toFixed(0)} Btu/hr·ft² · guideline < ${Math.round(flux_limit).toLocaleString('en-US')} (heating, ${refShort()})`,
+        tri(R.peak_flux < 0.8*flux_limit, R.peak_flux < flux_limit));
 }
 
 
@@ -6617,6 +7139,7 @@ h2 .num{font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:.2em
     <div class="kv"><span class="k">Service</span><span class="v">Boil-out coil — periodic transient heating</span></div>
     <div class="kv"><span class="k">Preset</span><span class="v">${presetLabel}</span></div>
     <div class="kv"><span class="k">Heating fluid</span><span class="v">${fluid_label}</span></div>
+    <div class="kv"><span class="k">Refrigerant / property engine</span><span class="v">${refFullName()} · ${propSourceLabel()}</span></div>
     <div class="kv"><span class="k">Vessel ID × S/S</span><span class="v">${I.vessel_id} in × ${I.vessel_ss} in</span></div>
     <div class="kv"><span class="k">Initial bath</span><span class="v">${I.initial_bath_temp} °F</span></div>
     <div class="kv"><span class="k">Target bath</span><span class="v">${I.target_bath_temp} °F</span></div>
@@ -6634,7 +7157,7 @@ h2 .num{font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:.2em
 </div>
 
 <h2><span class="num">02</span>Cycle Trajectory</h2>
-<div class="reasoning">Bath temperature integrated forward in time (forward-Euler, 5-second steps). Coil-side duty Q recomputed at each step from the instantaneous bath T using NTU-effectiveness. Heat loss to ambient subtracted at each step. Bath cp updated with current T from saturated-liquid NH₃ correlation.</div>
+<div class="reasoning">Bath temperature integrated forward in time (forward-Euler, 5-second steps). Coil-side duty Q recomputed at each step from the instantaneous bath T using NTU-effectiveness. Heat loss to ambient subtracted at each step. Bath cp updated with current T from the ${refShort()} saturated-liquid property engine (${propEngineLive() ? 'CoolProp' : 'ASHRAE polynomial'}).</div>
 <div class="curve-wrap">${buildCurveSVG()}</div>
 <div class="reasoning">Bath T (blue solid) rises asymptotically toward the steady-state equilibrium. Coil duty Q (red dashed) starts at peak when ΔT is largest and decays as the bath warms. The cycle is reported as complete when bath T reaches the target.</div>
 
@@ -6648,13 +7171,13 @@ h2 .num{font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:.2em
 </div>
 
 <h2><span class="num">04</span>Shell-Side h<sub>o</sub> &amp; Overall U<sub>o</sub></h2>
-<div class="reasoning">Pool-boiling NH<sub>3</sub> on plain-steel horizontal tubes. The linear-in-bath-T correlation is calibrated to three industrial reference designs over −25 to +30 °F bath, plain steel, at fluxes 2,000–6,000 Btu/hr·ft². Above +30 °F bath, the prediction extrapolates.</div>
-<div class="formula">h<sub>o</sub>(T<sub>bath</sub>) = 3.6107·T<sub>bath</sub> + 409.19   (clamped 200–800 Btu/hr·ft²·°F)
-h<sub>o</sub> at cycle start (T<sub>bath</sub> = ${I.initial_bath_temp} °F)  =  <span class="ans">${(3.6107*I.initial_bath_temp + 409.19).toFixed(0)} Btu/hr·ft²·°F</span>
-h<sub>o</sub> at cycle end (T<sub>bath</sub> = ${I.target_bath_temp} °F)    =  <span class="ans">${Math.max(200, Math.min(800, 3.6107*I.target_bath_temp + 409.19)).toFixed(0)} Btu/hr·ft²·°F</span>
+<div class="reasoning">Pool-boiling ${refShort()} on plain-steel horizontal tubes. The linear-in-bath-T correlation is calibrated to three industrial R-717 reference designs over −25 to +30 °F bath, plain steel, at fluxes 2,000–6,000 Btu/hr·ft²${refIsNH3() ? '' : ', scaled for ' + refShort() + ' by the Mostinski reduced-pressure ratio (an uncalibrated engineering estimate)'}. Above +30 °F bath, the prediction extrapolates.</div>
+<div class="formula">h<sub>o</sub>(T<sub>bath</sub>) = clamp(200…800, 3.6107·T<sub>bath</sub> + 409.19)${refIsNH3() ? '' : ' × Mostinski(' + refShort() + '/R-717)'}
+h<sub>o</sub> at cycle start (T<sub>bath</sub> = ${I.initial_bath_temp} °F)  =  <span class="ans">${poolBoilHo(I.initial_bath_temp).h.toFixed(0)} Btu/hr·ft²·°F</span>
+h<sub>o</sub> at cycle end (T<sub>bath</sub> = ${I.target_bath_temp} °F)    =  <span class="ans">${poolBoilHo(I.target_bath_temp).h.toFixed(0)} Btu/hr·ft²·°F</span>
 U<sub>o</sub> at cycle start (peak Q point)               =  <span class="ans">${R.init?.U_o?.toFixed(1) || '—'} Btu/hr·ft²·°F</span></div>
 
-${extrap_warn ? `<div class="warning-banner"><strong style="font-style:normal">⚠ Calibration extrapolation:</strong> ${extrap_pct}% of cycle time is spent with bath T above the +30 °F calibrated ceiling. The predicted cycle time outside this range is an extrapolation; recommend validating the first installation against measured cycle data.</div>` : ''}
+${extrap_warn ? `<div class="warning-banner"><strong style="font-style:normal">⚠ Calibration extrapolation:</strong> ${extrap_pct}% of cycle time is spent with bath T above the +30 °F R-717-calibrated ceiling. The predicted cycle time outside this range is an extrapolation; recommend validating the first installation against measured cycle data.</div>` : ''}
 
 <h2><span class="num">05</span>Energy Balance &amp; Verdict</h2>
 <div class="compact-grid">
@@ -6678,7 +7201,7 @@ ${extrap_warn ? `<div class="warning-banner"><strong style="font-style:normal">�
 <div class="verdict-grid">
   <div class="verdict ${R.reached_target ? 'pass' : 'fail'}"><div class="name">Target Reached</div><div class="text">${R.reached_target ? `Yes · ${R.cycle_min.toFixed(1)} min` : 'NO'}</div></div>
   <div class="verdict ${envelope && inEnvelope ? 'pass' : envelope ? 'warn' : 'info'}"><div class="name">Preset Envelope</div><div class="text">${envelope ? `${envelope.min_min}–${envelope.max_min} min ${inEnvelope ? '✓' : '⚠'}` : 'N/A'}</div></div>
-  <div class="verdict ${R.peak_flux < 8000 ? 'pass' : R.peak_flux < 10000 ? 'warn' : 'fail'}"><div class="name">Peak Heat Flux</div><div class="text">${R.peak_flux.toFixed(0)} Btu/hr·ft²</div></div>
+  <div class="verdict ${R.peak_flux < 0.8*fluxLimits(I.initial_bath_temp).q_practical ? 'pass' : R.peak_flux < fluxLimits(I.initial_bath_temp).q_practical ? 'warn' : 'fail'}"><div class="name">Peak Heat Flux</div><div class="text">${R.peak_flux.toFixed(0)} Btu/hr·ft²</div></div>
   <div class="verdict ${R.net_submergence_in >= 0 ? 'pass' : 'warn'}"><div class="name">Submergence</div><div class="text">${R.net_submergence_in.toFixed(1)} in</div></div>
   <div class="verdict ${R.vessel_radial_clear >= I.clearance ? 'pass' : 'fail'}"><div class="name">Clearance</div><div class="text">${R.vessel_radial_clear.toFixed(2)} in</div></div>
   <div class="verdict ${R.init?.V_fps >= 3 && R.init?.V_fps <= 80 ? 'pass' : 'warn'}"><div class="name">Velocity</div><div class="text">${R.init?.V_fps?.toFixed(2) || '—'} ft/s</div></div>
@@ -6693,11 +7216,11 @@ ${extrap_warn ? `<div class="warning-banner"><strong style="font-style:normal">�
 
 <h2><span class="num">08</span>Methodology &amp; Scope</h2>
 <div class="note">
-  <strong style="font-style:normal;color:#3a2e15">Modeled:</strong> Lumped-capacitance bath energy balance (forward-Euler, 5-second steps); coil-side Dittus-Boelter + Schmidt helical correction; pool-boiling shell-side at instantaneous bath T (linear correlation calibrated −25 to +30 °F); heat-loss to ambient through insulated vessel shell; asymptote detection; bath c<sub>p</sub> updated each step from current T.
+  <strong style="font-style:normal;color:#3a2e15">Modeled:</strong> Lumped-capacitance bath energy balance (forward-Euler, 5-second steps); coil-side Dittus-Boelter + Schmidt helical correction; pool-boiling shell-side at instantaneous bath T (linear R-717 correlation calibrated −25 to +30 °F${refIsNH3() ? '' : ', Mostinski-scaled for ' + refShort()}); heat-loss to ambient through insulated vessel shell; asymptote detection; bath c<sub>p</sub> updated each step from current T.
   <br><br>
-  <strong style="font-style:normal;color:#3a2e15">Not modeled:</strong> Two-phase coil-side flow (notably: hot-gas defrost predictions assume single-phase vapor convection; real condensation enhancement yields h<sub>i</sub> 5–10× higher, so actual cycle times in the field will be 30–50% faster than HELIX predicts — predictions are conservative for sizing); bath vaporization mass loss; transient pressure-side dynamics; oil-layer effect on h<sub>o</sub>; coil flooding/draining transient at cycle start.
+  <strong style="font-style:normal;color:#3a2e15">Not modeled:</strong> Two-phase coil-side flow (notably: hot-gas defrost predictions assume single-phase vapor convection; real condensation enhancement yields h<sub>i</sub> several-fold higher — R-717 experience: 5–10×, cycle 30–50% faster — so predictions are conservative for sizing); bath vaporization mass loss; transient pressure-side dynamics; oil-layer effect on h<sub>o</sub>; coil flooding/draining transient at cycle start.
   <br><br>
-  <strong style="font-style:normal;color:#3a2e15">Code &amp; jurisdiction:</strong> Verify pipe MAWP per ASME B31.5 (refrigeration piping). All welds NDT per IIAR 2. Pipe material: A106 Gr. B for initial bath ≥ −20 °F; A333 Gr. 6 with Charpy impact testing below −20 °F. HELIX does not compute or certify pipe pressure rating.
+  <strong style="font-style:normal;color:#3a2e15">Code &amp; jurisdiction:</strong> Verify pipe MAWP per ASME B31.5 (refrigeration piping). All welds NDT per ${refIsNH3() ? 'IIAR 2' : 'ASHRAE 15 / ASME B31.5 practice'}. Pipe material: A106 Gr. B for initial bath ≥ −20 °F; A333 Gr. 6 with Charpy impact testing below −20 °F. HELIX does not compute or certify pipe pressure rating.
 </div>
 
 <div class="signature">
@@ -6709,7 +7232,7 @@ ${extrap_warn ? `<div class="warning-banner"><strong style="font-style:normal">�
   </div>
 </div>
 
-<div class="footer">HELIX · Ammonia Coil Engineering Atelier · Boil-out solver · forward-Euler lumped-capacitance bath integration</div>
+<div class="footer">HELIX · Refrigerant Coil Engineering Atelier · ${refFullName()} · Boil-out solver · forward-Euler lumped-capacitance bath integration</div>
 </div></body></html>`;
 
   const win = window.open('', '_blank', 'width=900,height=1100,scrollbars=yes');
@@ -6753,6 +7276,7 @@ function boilout_applyPreset(name){
 /* ─── 4.6 Boil-out recompute ─────────────────────────────────────────── */
 function boilout_recompute(){
   try {
+    PROP_WARN.clear();
     const I = boilout_readInputs();
     const R = boilout_compute(I);
     boilout_render(I, R);
@@ -6760,6 +7284,7 @@ function boilout_recompute(){
     try { boilout_renderGeometry(I, R); } catch(e){ console.warn('boilout_renderGeometry:', e); }
     try { boilout_renderProperties(I, R); } catch(e){ console.warn('boilout_renderProperties:', e); }
     window._bo_last = { I, R };  // keep for PDF export + sweep
+    renderPropWarnings('prop-warnings-boilout');
   } catch(e){ console.error('boilout_recompute:', e); }
 }
 
@@ -6987,6 +7512,7 @@ function hr_readInputs(){
   return {
     // Vessel & coil geometry (mirrors Subcooler / Boil-out)
     vessel_id,
+    refrigerant: REF_KEY,
     vessel_ss:  +$('hr_vessel_ss').value,
     pipe_size:  $('hr_pipe_size').value,
     length:     +$('hr_length').value,
@@ -7093,8 +7619,8 @@ function hr_compute(I){
     // Shell-side h_o — Churchill-Chu free convection in the NH3 liquid bath.
     // Film T = mean of outer wall and bath bulk.
     const T_film_liq = 0.5 * (T_wall_outer + I.bath_temp);
-    const props_bath = nh3Sat(T_film_liq);
-    const beta_bath = nh3_beta_liquid(T_film_liq);
+    const props_bath = refSat(T_film_liq);
+    const beta_bath = refBetaLiquid(T_film_liq);
     cc_out = h_natural_convection_cyl(T_wall_outer, I.bath_temp, OD, props_bath, beta_bath);
     const h_o_submerged = Math.max(20, cc_out.h);   // floor at 20 to avoid pathologies
 
@@ -7102,7 +7628,7 @@ function hr_compute(I){
     // Tube wall is colder than bath ⇒ also colder than vapor at saturation.
     // Use NH3 sat vapor properties at film T.
     const T_film_vap = 0.5 * (T_wall_outer + I.bath_temp);
-    const props_vap = nh3SatVapor(T_film_vap);
+    const props_vap = refSatVapor(T_film_vap);
     const beta_vap  = 1 / (T_film_vap + 459.67);   // ideal-gas β = 1/T_abs
     const cc_vap    = h_natural_convection_cyl(T_wall_outer, I.bath_temp, OD, props_vap, beta_vap);
     h_o_exposed     = Math.max(2, cc_vap.h);       // typical 2-10 Btu/hr·ft²·°F
@@ -7759,11 +8285,11 @@ function hr_renderProperties(I, R){
 
   let state, label, src;
   if (side === 'bath'){
-    state = nh3Sat(Tprobe);
-    label = 'Saturated Liquid NH₃ (bath side)';
-    src = 'nh3Sat() · ASHRAE 2017';
+    state = refSat(Tprobe);
+    label = 'Saturated Liquid ' + refShort() + ' (bath side)';
+    src = 'refSat() · ' + (propEngineLive() ? 'CoolProp' : 'ASHRAE 2017 poly');
   } else {
-    state = (typeof serviceProps === 'function') ? serviceProps(I.fluid, Tprobe) : nh3Sat(Tprobe);
+    state = (typeof serviceProps === 'function') ? serviceProps(I.fluid, Tprobe) : refSat(Tprobe);
     const fluid_label = (typeof HR_FLUID_LABEL !== 'undefined' && HR_FLUID_LABEL[I.fluid]) || I.fluid;
     label = `${fluid_label} (tube side)`;
     src = `serviceProps("${I.fluid}") · Arrhenius / ASHRAE polynomial fits`;
@@ -7786,11 +8312,11 @@ function hr_renderProperties(I, R){
   // Bath + tube states summary
   const T_avg = 0.5 * (I.tube_inlet_temp + R.T_out);
   const tubeProps = (typeof serviceProps === 'function') ? serviceProps(I.fluid, T_avg) : {};
-  const bath_state = nh3Sat(I.bath_temp);
+  const bath_state = refSat(I.bath_temp);
   const stateEl = document.getElementById('hr-state-grid');
   if (stateEl){
     stateEl.innerHTML = `
-      <div><span>Bath (saturated NH₃, ${I.bath_temp} °F)</span><span>P<sub>sat</sub>=${bath_state.P_psia.toFixed(1)} psia · ρ=${bath_state.rho_l.toFixed(2)} lb/ft³ · h<sub>fg</sub>=${bath_state.h_fg.toFixed(0)} Btu/lb</span></div>
+      <div><span>Bath (saturated ${refShort()}, ${I.bath_temp} °F)</span><span>P<sub>sat</sub>=${bath_state.P_psia.toFixed(1)} psia · ρ=${bath_state.rho_l.toFixed(2)} lb/ft³ · h<sub>fg</sub>=${bath_state.h_fg.toFixed(0)} Btu/lb</span></div>
       <div><span>Tube fluid (${(typeof HR_FLUID_LABEL !== 'undefined' && HR_FLUID_LABEL[I.fluid]) || I.fluid})</span><span>at T<sub>avg</sub>=${T_avg.toFixed(1)} °F</span></div>
       <div><span>Tube inlet T</span><span>${I.tube_inlet_temp.toFixed(1)} °F</span></div>
       <div><span>Tube outlet T (predicted)</span><span>${R.T_out.toFixed(1)} °F · ΔT<sub>tube</sub> = ${(R.T_out - I.tube_inlet_temp).toFixed(1)} °F</span></div>
@@ -8005,10 +8531,11 @@ ${R.direction_invalid ? `<div class="warning-banner"><strong style="font-style:n
 <h2><span class="num">01</span>Service Basis</h2>
 <div class="row">
   <div class="box">
-    <div class="kv"><span class="k">Service</span><span class="v">Heat recovery — boiling NH₃ pool warms tube fluid</span></div>
+    <div class="kv"><span class="k">Service</span><span class="v">Heat recovery — boiling ${refShort()} pool warms tube fluid</span></div>
+    <div class="kv"><span class="k">Refrigerant / property engine</span><span class="v">${refFullName()} · ${propSourceLabel()}</span></div>
     <div class="kv"><span class="k">Tube-side fluid</span><span class="v">${fluid_label}</span></div>
     <div class="kv"><span class="k">Vessel ID × S/S</span><span class="v">${I.vessel_id} in × ${I.vessel_ss} in</span></div>
-    <div class="kv"><span class="k">Bath temperature</span><span class="v">${I.bath_temp} °F (saturated NH₃)</span></div>
+    <div class="kv"><span class="k">Bath temperature</span><span class="v">${I.bath_temp} °F (saturated ${refShort()})</span></div>
     <div class="kv"><span class="k">Tube inlet T</span><span class="v">${I.tube_inlet_temp} °F</span></div>
     ${R.sizing_mode_duty ? `<div class="kv"><span class="k">Target duty</span><span class="v">${(R.duty_target/12000).toFixed(2)} TR</span></div>` : ''}
     ${R.sizing_mode_outlet ? `<div class="kv"><span class="k">Target outlet T</span><span class="v">${R.outlet_target.toFixed(1)} °F</span></div>` : ''}
@@ -8032,7 +8559,7 @@ Nu = 0.023·Re<sup>0.8</sup>·Pr<sup>0.4</sup>·ƒ<sub>helix</sub>  =  <span cla
 h<sub>i</sub> = Nu·k/D<sub>i</sub>  =  <span class="ans">${fmt(R.h_i,0)} Btu/hr·ft²·°F</span></div>
 
 <h2><span class="num">03</span>Shell-Side · h<sub>o</sub> (Natural Convection)</h2>
-<div class="reasoning">Churchill-Chu (1975) free convection on a horizontal cylinder in the saturated NH₃ liquid pool. The bath cools at the colder tube wall — this is NOT pool boiling at the wall. Outer-wall T is iteratively converged so the natural-convection ΔT matches the duty split. Validity: 10⁻⁵ ≤ Ra<sub>D</sub> ≤ 10¹². Pr range covers NH₃ liquid (~1–2).</div>
+<div class="reasoning">Churchill-Chu (1975) free convection on a horizontal cylinder in the saturated ${refShort()} liquid pool. The bath cools at the colder tube wall — this is NOT pool boiling at the wall. Outer-wall T is iteratively converged so the natural-convection ΔT matches the duty split. Validity: 10⁻⁵ ≤ Ra<sub>D</sub> ≤ 10¹² (liquid Pr for the selected refrigerant is supplied by the property engine).</div>
 <div class="formula">Outer wall T (converged)  =  <span class="ans">${R.T_wall_outer?.toFixed(1) || '—'} °F</span>
 Ra<sub>D</sub>  =  <span class="ans">${R.cc_Ra ? R.cc_Ra.toExponential(2) : '—'}</span>     Pr  =  <span class="ans">${R.cc_Pr?.toFixed(2) || '—'}</span>     Nu  =  <span class="ans">${R.cc_Nu?.toFixed(1) || '—'}</span>
 h<sub>o</sub>  =  <span class="ans">${R.h_o.toFixed(1)} Btu/hr·ft²·°F</span>${R.f_sub < 1 ? `
@@ -8070,7 +8597,7 @@ Check: U·A·LMTD = ${R.U_o.toFixed(1)}×${R.A_o.toFixed(1)}×${R.LMTD.toFixed(2
 
 <h2><span class="num">07</span>Methodology &amp; Scope</h2>
 <div class="note">
-  <strong style="font-style:normal;color:#3a2e15">Modeled:</strong> Steady-state NTU-effectiveness with the boiling NH₃ pool at constant saturation T (no shell-side T glide); Dittus-Boelter tube side (n = 0.4 for heating) with Schmidt helical correction; Churchill-Chu natural convection on the shell side with iteratively-converged outer-wall T; partial-submergence area-weighting (submerged + vapor-side exposed); Ito helical pressure drop; water / 30% glycol / 50% glycol property tables fit to ASHRAE.
+  <strong style="font-style:normal;color:#3a2e15">Modeled:</strong> Steady-state NTU-effectiveness with the boiling ${refShort()} pool at constant saturation T (no shell-side T glide — zeotropic blends like R-407C do glide in reality); Dittus-Boelter tube side (n = 0.4 for heating) with Schmidt helical correction; Churchill-Chu natural convection on the shell side with iteratively-converged outer-wall T; partial-submergence area-weighting (submerged + vapor-side exposed); Ito helical pressure drop; water / 30% glycol / 50% glycol property tables fit to ASHRAE.
   <br><br>
   <strong style="font-style:normal;color:#3a2e15">Not modeled:</strong> Boiling-induced agitation enhancement of h<sub>o</sub> beyond Churchill-Chu (real coils may run slightly better than the prediction when the pool boils vigorously at the free surface — these predictions are biased conservative); transient start-up; freezing of tube-side fluid; secondary loop hydraulics outside the coil; long-term glycol degradation.
   <br><br>
@@ -8086,7 +8613,7 @@ Check: U·A·LMTD = ${R.U_o.toFixed(1)}×${R.A_o.toFixed(1)}×${R.LMTD.toFixed(2
   </div>
 </div>
 
-<div class="footer">HELIX · Ammonia Coil Engineering Atelier · Heat Recovery · Churchill-Chu natural convection · ASHRAE-grade fluid properties</div>
+<div class="footer">HELIX · Refrigerant Coil Engineering Atelier · ${refFullName()} · Heat Recovery · Churchill-Chu natural convection · ${propEngineLive() ? 'CoolProp fluid properties' : 'ASHRAE-grade fluid properties'}</div>
 </div></body></html>`;
 
   const win = window.open('', '_blank', 'width=900,height=1100,scrollbars=yes');
@@ -8102,6 +8629,7 @@ Check: U·A·LMTD = ${R.U_o.toFixed(1)}×${R.A_o.toFixed(1)}×${R.LMTD.toFixed(2
 /* ─── 5.6 Heat Recovery recompute ────────────────────────────────────── */
 function hr_recompute(){
   try {
+    PROP_WARN.clear();
     const I = hr_readInputs();
     const R = hr_compute(I);
     hr_render(I, R);
@@ -8109,6 +8637,7 @@ function hr_recompute(){
     try { hr_renderGeometry(I, R); } catch(e){ console.warn('hr_renderGeometry:', e); }
     try { hr_renderProperties(I, R); } catch(e){ console.warn('hr_renderProperties:', e); }
     window._hr_last = { I, R };
+    renderPropWarnings('prop-warnings-hr');
   } catch(e){ console.error('hr_recompute:', e); }
 }
 
@@ -8151,6 +8680,22 @@ document.querySelectorAll('.service-tab').forEach(tab => {
     setActiveService(h);
   }
 })();
+
+
+/* ─── Refrigerant selector wiring ─────────────────────────────────────
+   One global working fluid drives all three service tabs. The selector is
+   disabled until the CoolProp WASM engine finishes loading (module script
+   at the end of the document); until then the app runs on the legacy R-717
+   polynomials. Changing the fluid persists to localStorage and recomputes
+   every tab, which also refreshes the window._bo_last / window._hr_last
+   caches the probe tabs and PDF exports read from.                       */
+(function wireRefrigerantSelector(){
+  const sel = document.getElementById('refrigerant');
+  if (!sel) return;
+  sel.addEventListener('change', () => setRefrigerant(sel.value));
+})();
+window.__helixCoolPropReady = initCoolPropEngine;
+window.__helixCoolPropFailed = coolPropEngineFailed;
 
 
 /* ─── Subcooler tab wiring ──────────────────────────────────────────── */
@@ -8881,6 +9426,25 @@ window.addEventListener('load', function(){
     tick();
   }
 });
+</script>
+
+<!-- ============ COOLPROP WASM LOADER ============
+     Loads the CoolProp fluid-property engine (coolprop.js + coolprop.wasm,
+     ~7 MB, served alongside this file). ES-module import + wasm fetch need
+     an HTTP origin; when unavailable (e.g. file://) the app falls back to
+     the built-in R-717 polynomial property model and locks the refrigerant
+     selector to ammonia. -->
+<script type="module">
+(async () => {
+  try {
+    const { default: CoolPropModule } = await import('./coolprop.js');
+    const mod = await CoolPropModule({ locateFile: (f) => './' + f });
+    if (window.__helixCoolPropReady) window.__helixCoolPropReady(mod);
+  } catch (err) {
+    if (window.__helixCoolPropFailed) window.__helixCoolPropFailed(err);
+    else console.error('CoolProp load failed:', err);
+  }
+})();
 </script>
 </body>
 </html>
