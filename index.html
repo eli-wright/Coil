@@ -1844,7 +1844,7 @@ footer .seal svg{width: 22px; height: 22px}
           <div class="prop-card">
             <h4>Hot Gas <span class="ref-name">R-717</span> mode</h4>
             <div style="font-family:'Cormorant Garamond',serif;font-size:16px;line-height:1.55;color:var(--paper-2)">
-              Hot compressor discharge gas at the fluid's typical high-side pressure (dew pressure at 95 °F condensing; ~170 psia for R-717, far higher for R-410A / R-744). Tube-side modeled as <strong>single-phase superheated vapor</strong> at the inlet T. <strong>Velocity guideline: 15–80 ft/s</strong> (gas range).
+              Hot compressor discharge gas at the fluid's typical high-side pressure (~170 psia for R-717, the legacy calibration basis; dew pressure at 95 °F condensing for other fluids — far higher for R-410A / R-744). Tube-side modeled as <strong>single-phase superheated vapor</strong> at the inlet T. <strong>Velocity guideline: 15–80 ft/s</strong> (gas range).
               <p style="margin-top:10px;padding:10px 12px;background:rgba(204,168,99,0.08);border-left:3px solid var(--brass);font-style:italic;color:var(--paper-2);font-size:14px;line-height:1.5">
                 <strong style="font-style:normal;color:var(--brass-2)">Conservative approximation.</strong> Real hot-gas defrost involves <em>condensation</em> on the inner wall as the gas cools below saturation at line pressure. Condensing h<sub>i</sub> is 5–10× higher than single-phase vapor convection. Actual cycle times in the field will be <strong>30–50% faster</strong> than HELIX predicts. Predictions are safe for sizing (you'll never under-design); they are biased pessimistic.
               </p>
@@ -2775,6 +2775,8 @@ function propSourceLabel(){
   return CP ? ('CoolProp ' + (CP_META && CP_META._version ? CP_META._version : '') + ' · Helmholtz EOS').replace('  ',' ')
             : 'R-717 polynomial fits · ASHRAE 2017 (CoolProp unavailable)';
 }
+// Short form for probe grids / inline report text — ONE spelling everywhere.
+function propSourceShort(){ return CP ? 'CoolProp' : 'ASHRAE 2017 poly'; }
 
 // Decode an embind exception thrown by the WASM module into a readable message
 function _cpErr(e){
@@ -2788,39 +2790,62 @@ function _cpErr(e){
 // Memoized raw PropsSI call. Inputs quantized to 0.005 units — far below any
 // engineering significance — so the iterative solvers and sweep/optimizer
 // loops hit the cache instead of re-entering the WASM EOS on every pass.
+// On overflow the OLDEST half is evicted (Map preserves insertion order)
+// instead of wiping every fluid's warm entries at once.
 const _propMemo = new Map();
+function _memoSet(k, v){
+  if (_propMemo.size >= 60000){
+    let n = 30000;
+    for (const key of _propMemo.keys()){ _propMemo.delete(key); if (--n <= 0) break; }
+  }
+  _propMemo.set(k, v);
+}
 function _cp(out, n1, v1, n2, v2, fluid){
   const k = out+'|'+n1+'|'+(Math.round(v1*200)/200)+'|'+n2+'|'+(Math.round(v2*200)/200)+'|'+fluid;
   let r = _propMemo.get(k);
   if (r === undefined){
-    if (_propMemo.size > 60000) _propMemo.clear();
     try { r = CP.PropsSI(out, n1, v1, n2, v2, fluid); }
     catch(e){ throw new Error('CoolProp ' + out + '(' + n1 + '=' + v1.toFixed(2) + ', ' + n2 + '=' + v2.toFixed(2) + ', ' + fluid + '): ' + _cpErr(e)); }
-    _propMemo.set(k, r);
+    _memoSet(k, r);
   }
   return r;
 }
+
+// Quantize a lookup temperature to 0.05 °F. Composite property states are
+// COMPUTED at the quantized T (key and value always agree), which keeps the
+// boil-out Euler integrator — whose bath T drifts continuously — hitting the
+// memo instead of opening a fresh WASM bin every 0.01 °F.
+function _quantT(T_F){ return Math.round(T_F*20)/20; }
 
 /* Clamp a requested saturation temperature into the fluid's valid two-phase
    window [triple point + 0.5 °F, critical point − 2 °F]. Out-of-range
    requests are clamped (never thrown) and a user-visible warning is queued —
    critical for R-744, whose 87.8 °F critical point sits below common
-   HP-liquid temperatures.                                                  */
+   HP-liquid temperatures. In polynomial-fallback mode (CP null) the same
+   guard applies with the R-717 fit range, so file:// users get the same
+   warning subsystem instead of silent extrapolation.                       */
+const _POLY_R717_META = {
+  // Validity window of the legacy polynomial fits, not the physical range.
+  TcritF: 270.1, TtripF: -107.9, satMinF: -40, satMaxF: 120,
+  rangeNote: 'R-717 polynomial fit range'
+};
 function clampSatT(T_F, key){
   key = key || REF_KEY;
-  const m = CP_META && CP_META[key];
+  const m = (CP_META && CP_META[key]) || (!CP && key === 'R717' ? _POLY_R717_META : null);
   if (!m) return T_F;
   if (T_F > m.satMaxF){
     PROP_WARN.set(key + '|hi', refShort(key) + ': requested ' + T_F.toFixed(1) +
       ' °F is above the usable saturation ceiling (' + m.satMaxF.toFixed(1) +
-      ' °F — critical point ' + m.TcritF.toFixed(1) + ' °F). Properties evaluated at ' +
-      m.satMaxF.toFixed(1) + ' °F; results there are NOT valid design values.');
+      (m.rangeNote ? ' °F — ' + m.rangeNote : ' °F — critical point ' + m.TcritF.toFixed(1) + ' °F') +
+      '). Properties evaluated at ' + m.satMaxF.toFixed(1) +
+      ' °F; results there are NOT valid design values.');
     return m.satMaxF;
   }
   if (T_F < m.satMinF){
     PROP_WARN.set(key + '|lo', refShort(key) + ': requested ' + T_F.toFixed(1) +
-      ' °F is below the triple point (' + m.TtripF.toFixed(1) + ' °F). Properties evaluated at ' +
-      m.satMinF.toFixed(1) + ' °F.');
+      ' °F is below the usable saturation floor of ' + m.satMinF.toFixed(1) +
+      (m.rangeNote ? ' °F (' + m.rangeNote + ')' : ' °F (triple point ' + m.TtripF.toFixed(1) + ' °F + 0.5 °F margin)') +
+      '. Properties evaluated at ' + m.satMinF.toFixed(1) + ' °F.');
     return m.satMinF;
   }
   return T_F;
@@ -2833,9 +2858,9 @@ function clampSatT(T_F, key){
    that pressure.                                                           */
 function refSat(T_F, key){
   key = key || REF_KEY;
-  if (!CP) return nh3Sat_poly(T_F);
-  const Tc = clampSatT(T_F, key);
-  const mk = key + '|sat|' + (Math.round(Tc*100)/100);
+  if (!CP) return nh3Sat_poly(clampSatT(T_F, key));
+  const Tc = _quantT(clampSatT(T_F, key));
+  const mk = key + '|sat|' + Tc;
   let s = _propMemo.get(mk);
   if (s) return s;
   const f = REFRIGERANTS[key].cp, m = CP_META[key];
@@ -2865,7 +2890,7 @@ function refSat(T_F, key){
     k_l:  _cp('L','T',T,'Q',0,f)*_BTUHRFTF_PER_WMK,
     sigma_Nm
   };
-  _propMemo.set(mk, s);
+  _memoSet(mk, s);
   return s;
 }
 
@@ -2926,16 +2951,17 @@ function refState(T_F, x){
    Same legacy key names as the old nh3SatVapor (vapor values under *_l keys)
    so the natural-convection code takes liquid or vapor without branching.  */
 function refSatVapor(T_F){
-  if (!CP) return nh3SatVapor_poly(T_F);
+  if (!CP) return nh3SatVapor_poly(clampSatT(T_F, 'R717'));
   const key = REF_KEY;
-  const Tc = clampSatT(T_F, key);
-  const mk = key + '|satv|' + (Math.round(Tc*100)/100);
+  const Tc = _quantT(clampSatT(T_F, key));
+  const mk = key + '|satv|' + Tc;
   let s = _propMemo.get(mk);
   if (s) return s;
   const f = REFRIGERANTS[key].cp;
   const T = _F2K(Tc);
   const rho = _cp('D','T',T,'Q',1,f)*_LBFT3_PER_KGM3;
   s = {
+    T_F: Tc,
     rho_l: rho, rho_v: rho,
     cp_l: _cp('C','T',T,'Q',1,f)/_JKGK_PER_BTULBF,
     mu_l: _cp('V','T',T,'Q',1,f)*_LBFTHR_PER_PAS,
@@ -2943,7 +2969,7 @@ function refSatVapor(T_F){
     P_psia: _cp('P','T',T,'Q',1,f)/_PA_PER_PSI,
     phase: 'sat_vapor'
   };
-  _propMemo.set(mk, s);
+  _memoSet(mk, s);
   return s;
 }
 
@@ -2963,12 +2989,14 @@ function refHotGas(T_F){
       ' °F). Evaluated as vapor at ' + m.gasMinF.toFixed(1) + ' °F.');
     Tq = m.gasMinF;
   }
-  const mk = key + '|gas|' + (Math.round(Tq*100)/100);
+  Tq = _quantT(Tq);
+  const mk = key + '|gas|' + Tq;
   let s = _propMemo.get(mk);
   if (s) return s;
   const f = REFRIGERANTS[key].cp;
   const T = _F2K(Tq);
   s = {
+    T_F: Tq,
     rho_l: _cp('D','T',T,'P',m.PdisPa,f)*_LBFT3_PER_KGM3,
     cp_l:  _cp('C','T',T,'P',m.PdisPa,f)/_JKGK_PER_BTULBF,
     mu_l:  _cp('V','T',T,'P',m.PdisPa,f)*_LBFTHR_PER_PAS,
@@ -2976,21 +3004,21 @@ function refHotGas(T_F){
     P_psia: m.PdisPsia,
     phase: 'vapor'
   };
-  _propMemo.set(mk, s);
+  _memoSet(mk, s);
   return s;
 }
 
 /* Liquid isobaric thermal-expansion coefficient β [1/°R] at saturation. */
 function refBetaLiquid(T_F){
-  if (!CP) return nh3_beta_liquid_poly(T_F);
+  if (!CP) return nh3_beta_liquid_poly(clampSatT(T_F, 'R717'));
   const key = REF_KEY;
-  const Tc = clampSatT(T_F, key);
-  const mk = key + '|beta|' + (Math.round(Tc*100)/100);
+  const Tc = _quantT(clampSatT(T_F, key));
+  const mk = key + '|beta|' + Tc;
   let b = _propMemo.get(mk);
   if (b !== undefined) return b;
   const f = REFRIGERANTS[key].cp;
   b = _cp('isobaric_expansion_coefficient','T',_F2K(Tc),'Q',0,f)/1.8;  // 1/K → 1/°R
-  _propMemo.set(mk, b);
+  _memoSet(mk, b);
   return b;
 }
 
@@ -2998,12 +3026,12 @@ function refBetaLiquid(T_F){
    reference ceiling, property-driven so it is fluid-correct automatically. */
 function zuberCHF(T_bath_F, key){
   const s = refSat(T_bath_F, key);
-  const hfg_SI = s.h_fg * 2326;
-  const rho_g_SI = s.rho_g * 16.0185;
-  const rho_l_SI = s.rho_l * 16.0185;
+  const hfg_SI = s.h_fg * _J_PER_BTULB;
+  const rho_g_SI = s.rho_g / _LBFT3_PER_KGM3;
+  const rho_l_SI = s.rho_l / _LBFT3_PER_KGM3;
   const q_SI = 0.131*hfg_SI*Math.pow(rho_g_SI, 0.5)
                *Math.pow(Math.max(0, s.sigma_Nm*9.81*(rho_l_SI - rho_g_SI)), 0.25);
-  return q_SI*0.3170;
+  return q_SI*0.3170;   // W/m² → BTU/hr·ft²
 }
 
 /* Mostinski nucleate-boiling factor  P_c^0.69 · F(p_r)  with
@@ -3025,13 +3053,26 @@ function _mostinskiF(key, T_bath_F){
    Other refrigerants: base × Mostinski reduced-pressure ratio vs R-717 at
    the same bath temperature — exact for ammonia (ratio 1), a documented
    engineering estimate for everything else.                               */
+// The R-717 field-calibration constants — shared by the math AND the printed
+// formula strings in the PDF reports, so a recalibration can't diverge.
+const POOL_BOIL_SLOPE = 3.6107, POOL_BOIL_INTC = 409.19;
+const POOL_BOIL_HMIN = 200, POOL_BOIL_HMAX = 800;
+function poolBoilFormulaHTML(){
+  return 'clamp(' + POOL_BOIL_HMIN + '…' + POOL_BOIL_HMAX + ', ' +
+         POOL_BOIL_SLOPE + '·T<sub>bath</sub> + ' + POOL_BOIL_INTC + ')';
+}
 function poolBoilScale(T_bath_F){
   if (!CP || REF_KEY === 'R717') return 1.0;
+  const mk = REF_KEY + '|pbs|' + (Math.round(T_bath_F*10)/10);
+  let sc = _propMemo.get(mk);
+  if (sc !== undefined) return sc;
   const fNH3 = _mostinskiF('R717', T_bath_F);
-  return fNH3 > 0 ? _mostinskiF(REF_KEY, T_bath_F)/fNH3 : 1.0;
+  sc = fNH3 > 0 ? _mostinskiF(REF_KEY, T_bath_F)/fNH3 : 1.0;
+  _memoSet(mk, sc);
+  return sc;
 }
 function poolBoilHo(T_bath_F){
-  const base = Math.max(200, Math.min(800, 3.6107*T_bath_F + 409.19));
+  const base = Math.max(POOL_BOIL_HMIN, Math.min(POOL_BOIL_HMAX, POOL_BOIL_SLOPE*T_bath_F + POOL_BOIL_INTC));
   const scale = poolBoilScale(T_bath_F);
   return { h: base*scale, base, scale };
 }
@@ -3042,18 +3083,25 @@ function poolBoilHo(T_bath_F){
    is R-717 practice; other fluids scale it by their Zuber-CHF ratio to NH3
    at the same bath T (clamped to a sane band).                             */
 function fluxLimits(T_bath_F){
+  const mk = REF_KEY + '|flx|' + (Math.round(T_bath_F*10)/10) + '|' + (CP ? 1 : 0);
+  let fl = _propMemo.get(mk);
+  if (fl) return fl;
   const q_chf = zuberCHF(T_bath_F, REF_KEY);
-  if (!CP || REF_KEY === 'R717') return { q_practical: 10000, q_chf };
-  const q_chf_nh3 = zuberCHF(T_bath_F, 'R717');
-  const q_practical = Math.min(30000, Math.max(500, 10000 * (q_chf/Math.max(q_chf_nh3,1))));
-  return { q_practical, q_chf };
+  if (!CP || REF_KEY === 'R717'){
+    fl = { q_practical: 10000, q_chf };
+  } else {
+    const q_chf_nh3 = zuberCHF(T_bath_F, 'R717');
+    fl = { q_practical: Math.min(30000, Math.max(500, 10000 * (q_chf/Math.max(q_chf_nh3,1)))), q_chf };
+  }
+  _memoSet(mk, fl);
+  return fl;
 }
 
 function serviceProps(svc, T_F){
   // Refrigerant services route through the CoolProp engine for the ACTIVE fluid.
   // (Legacy service tokens 'nh3_liq'/'nh3_vap' are kept for wiring compatibility.)
-  if (svc === "hp_liquid" || svc === "nh3_liq" || svc === "ref_liq") return refSat(T_F);
-  if (svc === "nh3_vap" || svc === "hot_gas" || svc === "ref_vap") return refHotGas(T_F);
+  if (svc === "hp_liquid" || svc === "nh3_liq") return refSat(T_F);
+  if (svc === "nh3_vap" || svc === "hot_gas") return refHotGas(T_F);
   if (svc === "warm_water" || svc === "water"){
     // Water properties calibrated to ASHRAE Handbook 2017 ch.31, valid 32-120°F.
     // Viscosity uses Arrhenius-like form μ = A·exp(B/(T+C)); max error 0.3% vs reference.
@@ -3108,6 +3156,7 @@ function serviceProps(svc, T_F){
 function nh3HotGas_poly(T_F){
   const T = T_F;
   return {
+    T_F: T,
     rho_l: 1.62 - 0.0022*(T - 170),     // lb/ft³  (~1.6 at 170 °F, 170 psia)
     cp_l: 0.587 + 0.00018*(T - 170),    // Btu/lb·°F (vapor cp_p)
     mu_l: 0.0288 + 0.000018*(T - 170),  // lb/ft·hr  (vapor viscosity)
@@ -3126,12 +3175,14 @@ function nh3HotGas_poly(T_F){
    code can take either liquid or vapor without branching.            */
 function nh3SatVapor_poly(T_F){
   const T = T_F;
+  const rho = 0.0265 * Math.exp(0.0193*(T + 40)); // lb/ft³  (≈0.07 @ -10°F, 0.55 @ 70°F)
   return {
-    rho_l: 0.0265 * Math.exp(0.0193*(T + 40)),   // lb/ft³  (≈0.07 @ -10°F, 0.55 @ 70°F)
+    T_F: T,
+    rho_l: rho, rho_v: rho,
     cp_l:  0.535 + 0.00040*T,                     // Btu/lb·°F  (cp,v rising with T)
     mu_l:  0.0218 + 0.000062*(T + 40),            // lb/ft·hr
     k_l:   0.0143 + 0.0000275*(T + 40),           // Btu/hr·ft·°F
-    P_psia: 14.7,
+    P_psia: nh3Sat_poly(T).P_psia,                // real sat P from the Antoine fit
     phase: 'sat_vapor'
   };
 }
@@ -3158,63 +3209,93 @@ function nh3_beta_liquid_poly(T_F){
    polynomials and the selector is locked to R-717.                          */
 
 function initCoolPropEngine(module){
-  CP = module;
-  CP_META = {};
-  try { CP_META._version = CP.get_global_param_string('version'); } catch(e){ CP_META._version = ''; }
+  // Build ALL metadata into locals first — CP/CP_META are only committed after
+  // the loop finishes, so a mid-bootstrap exception can never leave the app
+  // half-initialized (engine "live" with missing per-fluid metadata).
+  const meta = {};
+  try { meta._version = module.get_global_param_string('version'); } catch(e){ meta._version = ''; }
+  const failedFluids = [];
   for (const key of Object.keys(REFRIGERANTS)){
     const f = REFRIGERANTS[key].cp;
-    const TcritF = _K2F(CP.Props1SI(f, 'Tcrit'));
-    const TtripF = _K2F(CP.Props1SI(f, 'Ttriple'));
-    const PcritPa = CP.Props1SI(f, 'pcrit');
-    const m = {
-      TcritF, TtripF, PcritPa,
-      PcritPsia: PcritPa/_PA_PER_PSI,
-      satMinF: TtripF + 0.5,
-      satMaxF: TcritF - 2.0,
-      hOffJ: CP.PropsSI('H','T',_F2K(-40),'Q',0,f)   // ASHRAE IP: h_f = 0 at −40 °F
-    };
-    // Typical high-side (discharge) pressure for the hot-gas service:
-    // dew pressure at 95 °F condensing, capped at 0.9·P_crit (the cap is the
-    // operative value for R-744, which cannot condense at 95 °F).
-    let Pdis;
-    try { Pdis = CP.PropsSI('P','T',_F2K(95),'Q',1,f); } catch(e){ Pdis = 0.9*PcritPa; }
-    Pdis = Math.min(Pdis, 0.9*PcritPa);
-    m.PdisPa = Pdis;
-    m.PdisPsia = Pdis/_PA_PER_PSI;
-    m.gasMinF = _K2F(CP.PropsSI('T','P',Pdis,'Q',1,f)) + 1;
-    CP_META[key] = m;
+    try {
+      const TcritF = _K2F(module.Props1SI(f, 'Tcrit'));
+      const TtripF = _K2F(module.Props1SI(f, 'Ttriple'));
+      const PcritPa = module.Props1SI(f, 'pcrit');
+      const m = {
+        TcritF, TtripF, PcritPa,
+        PcritPsia: PcritPa/_PA_PER_PSI,
+        satMinF: TtripF + 0.5,
+        satMaxF: TcritF - 2.0,
+        hOffJ: module.PropsSI('H','T',_F2K(-40),'Q',0,f)   // ASHRAE IP: h_f = 0 at −40 °F
+      };
+      // Typical high-side (discharge) pressure for the hot-gas service.
+      // R-717 keeps the legacy 170 psia basis the tool was calibrated and
+      // documented against (old fixed-pressure polynomial model); other fluids
+      // use dew pressure at 95 °F condensing, capped at 0.9·P_crit (the cap is
+      // the operative value for R-744, which cannot condense at 95 °F).
+      let Pdis;
+      if (key === 'R717'){
+        Pdis = 170 * _PA_PER_PSI;
+      } else {
+        try { Pdis = module.PropsSI('P','T',_F2K(95),'Q',1,f); } catch(e){ Pdis = 0.9*PcritPa; }
+        Pdis = Math.min(Pdis, 0.9*PcritPa);
+      }
+      m.PdisPa = Pdis;
+      m.PdisPsia = Pdis/_PA_PER_PSI;
+      m.gasMinF = _K2F(module.PropsSI('T','P',Pdis,'Q',1,f)) + 1;
+      meta[key] = m;
+    } catch(e){
+      failedFluids.push(key);
+      console.error('CoolProp metadata bootstrap failed for ' + key + ' — option disabled.', e);
+    }
   }
+  if (!meta.R717){
+    // Without a working R-717 reference (Mostinski/CHF ratios need it) the
+    // engine is unusable — fall back to the polynomial model entirely.
+    throw new Error('CoolProp bootstrap failed for the R-717 reference fluid');
+  }
+  CP = module;
+  CP_META = meta;
 
-  // Restore the last-used refrigerant and unlock the selector.
+  // Restore the last-used refrigerant and unlock the selector; fluids whose
+  // metadata failed to build stay selectable-off.
   let saved = null;
   try { saved = localStorage.getItem('helix_refrigerant'); } catch(e){}
-  if (saved && REFRIGERANTS[saved]) REF_KEY = saved;
-  const sel = document.getElementById('refrigerant');
-  if (sel){ sel.disabled = false; sel.value = REF_KEY; }
+  if (saved && REFRIGERANTS[saved] && CP_META[saved]) REF_KEY = saved;
+  const sel = $('refrigerant');
+  if (sel){
+    sel.disabled = false;
+    Array.from(sel.options).forEach(o => { o.disabled = !CP_META[o.value]; });
+    sel.value = REF_KEY;
+  }
 
   refreshFluidLabels();
   recomputeAllTabs();
 }
 
 function coolPropEngineFailed(err){
-  console.error('CoolProp WASM failed to load — running R-717 polynomial fallback.', err);
+  console.error('CoolProp WASM unavailable — running R-717 polynomial fallback.', err);
+  CP = null;                     // guarantee every property call takes the *_poly path
+  CP_META = null;
   REF_KEY = 'R717';
-  const sel = document.getElementById('refrigerant');
+  const sel = $('refrigerant');
   if (sel){ sel.value = 'R717'; sel.disabled = true; sel.title = 'CoolProp failed to load — R-717 polynomial fallback only. Serve over HTTP for multi-refrigerant support.'; }
-  const eng = document.getElementById('ref-engine');
+  refreshFluidLabels();
+  // Painted AFTER refreshFluidLabels so the label pass can't repaint it "live".
+  const eng = $('ref-engine');
   if (eng){
     eng.textContent = 'CoolProp unavailable — R-717 polynomial fallback';
     eng.classList.add('engine-fallback');
   }
-  refreshFluidLabels();
 }
 
 function setRefrigerant(key){
   if (!REFRIGERANTS[key] || key === REF_KEY) return;
   if (!CP && key !== 'R717') return;             // locked to R-717 until engine loads
+  if (CP && CP_META && !CP_META[key]) return;    // fluid whose metadata failed to build
   REF_KEY = key;
   try { localStorage.setItem('helix_refrigerant', key); } catch(e){}
-  refreshFluidLabels();
+  try { refreshFluidLabels(); } catch(e){ console.error('label refresh failed:', e); }
   recomputeAllTabs();
 }
 
@@ -3235,60 +3316,72 @@ function refreshFluidLabels(){
   document.querySelectorAll('.ref-name').forEach(el => { el.textContent = r.short; });
   document.querySelectorAll('.props-tab-label').forEach(el => { el.textContent = r.short + ' Props'; });
 
-  const set = (id, txt) => { const el = document.getElementById(id); if (el) el.textContent = txt; };
+  const set = (id, txt) => { const el = $(id); if (el) el.textContent = txt; };
   set('coil-cap-ref', r.short + ' · Double-Wound');
-  set('hero-ref-chip', CP ? r.short + ' · ' + r.name : 'R-717 Native');
+  set('hero-ref-chip', CP ? refFullName() : 'R-717 Native');
   set('props-head-sub', r.name + ' Properties · ' + r.short);
   set('bo-props-head', r.name + ' Properties · ' + r.short);
-  set('hr-props-head', r.name + ' Properties · ' + r.short);
 
-  const meta = document.getElementById('ref-meta');
+  const meta = $('ref-meta');
   if (meta){
     meta.textContent = m
       ? ('T_crit ' + m.TcritF.toFixed(1) + ' °F · P_crit ' + m.PcritPsia.toFixed(0) + ' psia · ' +
          r.safety + ' · sat range ' + m.satMinF.toFixed(0) + '…' + m.satMaxF.toFixed(0) + ' °F')
       : 'T_crit 270.3 °F · P_crit 1644 psia · B2L';
   }
-  const eng = document.getElementById('ref-engine');
+  const eng = $('ref-engine');
   if (eng && CP){ eng.textContent = 'CoolProp ' + (CP_META._version || '') + ' · WASM live'; eng.classList.remove('engine-fallback'); }
 
   // Select-option labels that name the refrigerant
   const opt = (selId, val, txt) => {
-    const s = document.getElementById(selId);
+    const s = $(selId);
     if (!s) return;
     const o = Array.from(s.options).find(o => o.value === val);
     if (o) o.textContent = txt;
   };
   opt('shell_fluid', 'nh3_liq', 'Liquid ' + r.short + ' (subcooled)');
   opt('shell_mode', 'pool_boil', 'Pool-Boiling ' + r.short + ' (default)');
-  opt('bo_fluid', 'hp_liquid', 'HP Liquid ' + r.short + ' (warm receiver)');
-  opt('bo_fluid', 'hot_gas', 'Hot Gas ' + r.short + ' (compressor discharge)');
+  opt('bo_fluid', 'hp_liquid', boilout_fluid_label('hp_liquid'));
+  opt('bo_fluid', 'hot_gas', boilout_fluid_label('hot_gas'));
   opt('bo_probe_q', 'hot_gas', m ? ('Hot Discharge Gas (~' + m.PdisPsia.toFixed(0) + ' psia)') : 'Hot Discharge Gas (~170 psia)');
   opt('hr_probe_side', 'bath', 'Bath (Saturated ' + r.short + ')');
 
-  // MAWP / design-pressure guidance in the Field Notes card
-  const mawp = document.getElementById('mawp-note');
+  // MAWP / design-pressure guidance in the Field Notes card.
+  // (Guarded: a property failure here must not abort a fluid switch midway.)
+  const mawp = $('mawp-note');
   if (mawp){
-    if (REF_KEY === 'R744'){
-      mawp.innerHTML = 'R-744 high side is <strong>transcritical</strong> above 87.8 °F — gas-cooler design pressure commonly ≥ <strong>1,450 psig</strong>; subcritical HP liquid at 80 °F already sits near <strong>960 psia</strong>.';
-    } else if (m){
-      const p115 = (CP ? refSat(115 > m.satMaxF ? m.satMaxF : 115, REF_KEY).P_dew_psia : 251) - 14.7;
-      mawp.innerHTML = 'for ' + r.short + ' condensing service, saturation at 115 °F ≈ <strong>' +
-        Math.round(p115) + ' psig</strong> — a common basis for the high-side relief setting.';
-    } else {
-      mawp.innerHTML = 'typically <strong>≥ 250 psig</strong> for ammonia condensing service.';
-    }
+    try {
+      if (REF_KEY === 'R744'){
+        mawp.innerHTML = 'R-744 high side is <strong>transcritical</strong> above 87.8 °F — gas-cooler design pressure commonly ≥ <strong>1,450 psig</strong>; subcritical HP liquid at 80 °F already sits near <strong>960 psia</strong>.';
+      } else if (m){
+        const p115 = (CP ? refSat(115 > m.satMaxF ? m.satMaxF : 115, REF_KEY).P_dew_psia : 251) - 14.7;
+        mawp.innerHTML = 'for ' + r.short + ' condensing service, saturation at 115 °F ≈ <strong>' +
+          Math.round(p115) + ' psig</strong> — a common basis for the high-side relief setting.';
+      } else {
+        mawp.innerHTML = 'typically <strong>≥ 250 psig</strong> for ammonia condensing service.';
+      }
+    } catch(e){ console.error('MAWP note update failed:', e); }
   }
 }
 
 /* Paint queued out-of-range property warnings into the given banner div.   */
 function renderPropWarnings(bannerId){
-  const el = document.getElementById(bannerId);
+  const el = $(bannerId);
   if (!el) return;
   if (!PROP_WARN.size){ el.style.display = 'none'; el.innerHTML = ''; return; }
   el.style.display = '';
   el.innerHTML = '<div class="pw-head">◆ Property-range warnings · ' + refShort() + '</div>' +
     Array.from(PROP_WARN.values()).map(w => '<div class="pw-item">' + w + '</div>').join('');
+}
+
+/* Same warnings as an inline block for the printable PDF reports — a report
+   generated from a clamped property state must disclose it.                */
+function propWarningsHTML(){
+  if (!PROP_WARN.size) return '';
+  return '<div style="background:#fff3e0;border:1.5px solid #c0700e;border-radius:3px;padding:10px 14px;margin:10px 0;font-size:11px;color:#3a2e15">' +
+    '<strong style="color:#c0700e">⚠ PROPERTY-RANGE WARNINGS (' + refShort() + '):</strong> ' +
+    Array.from(PROP_WARN.values()).map(w => '<div style="margin-top:4px">' + w + '</div>').join('') +
+    '<div style="margin-top:6px;font-style:italic">Results derived from clamped property states are NOT valid design values.</div></div>';
 }
 
 
@@ -4846,9 +4939,12 @@ function renderProperties(I, R){
   const s = refState(Tprobe, xprobe);
   const glideRow = (s.glide_F || 0) > 0.5
     ? `<div><span>T glide (dew−bubble)</span><span>${s.glide_F.toFixed(1)} °F</span></div>` : '';
+  const clampedRow = (s.T_F != null && Math.abs(s.T_F - Tprobe) > 0.1)
+    ? `<div><span style="color:var(--ember)">⚠ Evaluated at</span><span style="color:var(--ember)">${s.T_F.toFixed(1)} °F (clamped to valid range)</span></div>` : '';
   $('probe-grid').innerHTML = `
     <div><span>Fluid</span><span>${refShort()}</span></div>
     <div><span>T</span><span>${Tprobe} °F</span></div>
+    ${clampedRow}
     <div><span>x (quality)</span><span>${xprobe}</span></div>
     <div><span>P sat${s.glide_F > 0.5 ? ' (bubble)' : ''}</span><span>${s.P_psia.toFixed(1)} psia</span></div>
     ${glideRow}
@@ -4860,7 +4956,7 @@ function renderProperties(I, R){
     <div><span>c<sub>p</sub> liquid</span><span>${s.cp_l.toFixed(3)} BTU/lb·°F</span></div>
     <div><span>μ liquid</span><span>${s.mu_l.toFixed(3)} lb/ft·hr</span></div>
     <div><span>k liquid</span><span>${s.k_l.toFixed(3)} BTU/hr·ft·°F</span></div>
-    <div><span>Source</span><span>${propEngineLive() ? 'CoolProp' : 'ASHRAE poly'}</span></div>
+    <div><span>Source</span><span>${propSourceShort()}</span></div>
   `;
 
   const sIn = refSat(I.inlet_temp);
@@ -5043,6 +5139,7 @@ ${(() => {
   return nFail > 0 ? `<div style="margin:12px 0 0;padding:10px 14px;background:#fdeaea;border:2px solid #b3261e;color:#b3261e;font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.14em;text-transform:uppercase;font-weight:700">⚠ Not for issue — ${nFail} design ${nFail > 1 ? 'criteria fail' : 'criterion fails'} (see §08). Resolve before sending.</div>` : '';
 })()}
 
+${propWarningsHTML()}
 <h2><span class="num">01</span>Design Basis</h2>
 <div class="row">
   <div class="box">
@@ -5075,7 +5172,7 @@ h<sub>i</sub> = Nu·k/D<sub>i</sub> = ${Nu_calc.toFixed(1)}×${R.props.k_l.toFix
 
 <h2><span class="num">03</span>Shell-Side · h<sub>o</sub></h2>
 <div class="reasoning">${I.shell_mode === 'pool_boil' ? 'Pool-boiling ' + refShort() + ' on plain-steel horizontal tubes. Empirical correlation linear in bath temperature, calibrated to three industrial R-717 reference designs spanning bath T = −20 °F to +30 °F (±0.3 °F outlet)' + (refIsNH3() ? '.' : ', scaled ×' + poolBoilScale(I.bath_temp).toFixed(2) + ' for ' + refShort() + ' by Mostinski reduced-pressure ratio — an uncalibrated engineering estimate.') : I.shell_mode === 'forced_annular' ? 'Patil/Shende/Ghosh 1982 (Chem. Eng. Dec 13) annular HCHE correlation. Shell fluid forced through annulus between cylinders B and C, crossing the helical coil.' : I.shell_mode === 'dry_vapor' ? 'Dry / non-submerged rating per customer request: the coil is treated as fully exposed above the liquid level, transferring heat by free convection to saturated ' + refShort() + ' <em>vapor</em> (Churchill-Chu horizontal cylinder, ideal-gas β = 1/T<sub>abs</sub>). Vapor-side h<sub>o</sub> is far below the pool-boiling value, so it dominates the resistance network and subcooling is minimal. This rating is conservative for sizing.' : 'Free convection on horizontal tube in a static bath. Conservative typical value; field verification recommended.'}</div>
-<div class="formula">${I.shell_mode === 'pool_boil' ? `h<sub>o</sub> = clamp(200…800, 3.6107·T<sub>bath</sub> + 409.19)${refIsNH3() ? '' : ` × ${poolBoilScale(I.bath_temp).toFixed(3)} (Mostinski, ${refShort()}/R-717)`}  =  <span class="ans">${fmt(R.h_o,0)} BTU/hr·ft²·°F</span>` : I.shell_mode === 'dry_vapor' ? `h<sub>o</sub> = Churchill-Chu free convection to ${refShort()} vapor (β = 1/T<sub>abs</sub>)  =  <span class="ans">${fmt(R.h_o,1)} BTU/hr·ft²·°F</span>` : `h<sub>o</sub>  =  <span class="ans">${fmt(R.h_o,0)} BTU/hr·ft²·°F</span>  (${I.shell_mode})`}</div>
+<div class="formula">${I.shell_mode === 'pool_boil' ? `h<sub>o</sub> = ${poolBoilFormulaHTML()}${refIsNH3() ? '' : ` × ${poolBoilScale(I.bath_temp).toFixed(3)} (Mostinski, ${refShort()}/R-717)`}  =  <span class="ans">${fmt(R.h_o,0)} BTU/hr·ft²·°F</span>` : I.shell_mode === 'dry_vapor' ? `h<sub>o</sub> = Churchill-Chu free convection to ${refShort()} vapor (β = 1/T<sub>abs</sub>)  =  <span class="ans">${fmt(R.h_o,1)} BTU/hr·ft²·°F</span>` : `h<sub>o</sub>  =  <span class="ans">${fmt(R.h_o,0)} BTU/hr·ft²·°F</span>  (${I.shell_mode})`}</div>
 
 <h2><span class="num">04</span>Overall U<sub>o</sub></h2>
 <div class="reasoning">Series resistance network, all referenced to outside surface area.</div>
@@ -5883,6 +5980,10 @@ function runSweep(){
   const xs = [];
   const ys = [];
   // For discrete-valued n_windings, sweep across valid winding counts
+  // Per-point try/catch: CoolProp can throw where the old polynomials never
+  // did (e.g. a blend flash failing at a swept-out-of-range temperature) —
+  // one bad point must not abort the whole sweep. Mirrors the per-candidate
+  // guards in optimizeCoil / forceCompute / sizeToTarget.
   if (variable === "n_windings"){
     for (const nw of [1,2,3,4,6]){
       const I = {...baseI, n_windings: nw,
@@ -5890,9 +5991,11 @@ function runSweep(){
       I.coil_od = I.winding_cls[0];
       I.coil_id_inner = I.winding_cls[I.winding_cls.length-1] || I.coil_od;
       I.topology = nw === 1 ? 'single' : 'series';
-      const R = compute(I);
-      xs.push(nw);
-      ys.push(R.T_out);
+      try {
+        const R = compute(I);
+        xs.push(nw);
+        ys.push(R.T_out);
+      } catch(e){ console.warn('sweep point n_windings=' + nw + ' failed:', e); }
     }
   } else {
     for (let i=0; i<N; i++){
@@ -5900,10 +6003,18 @@ function runSweep(){
       const val = baseVal*mult;
       const I = {...baseI};
       I[variable] = val;
-      const R = compute(I);
-      xs.push(val);
-      ys.push(R.T_out);
+      try {
+        const R = compute(I);
+        xs.push(val);
+        ys.push(R.T_out);
+      } catch(e){ console.warn('sweep point ' + variable + '=' + val.toFixed(2) + ' failed:', e); }
     }
+  }
+  if (xs.length < 2){
+    $('sweep-svg').innerHTML = '';
+    $('sweep-grid').innerHTML = '<div style="color:var(--ember)">Sweep failed — property engine could not evaluate these conditions.</div>';
+    renderPropWarnings('prop-warnings-subcooler');
+    return;
   }
 
   // SVG
@@ -5965,6 +6076,11 @@ function runSweep(){
   $('sweep-grid').innerHTML = xs.map((x,i) => `
     <div><span>${variable === 'n_windings' ? `${x}-Wound` : x.toFixed(2)}</span><span>${ys[i].toFixed(2)} °F</span></div>
   `).join('');
+
+  // Sweeps are the workflow most likely to wander out of a fluid's valid
+  // range (e.g. R-744 near its critical point) — surface any clamp warnings
+  // the swept points queued, on top of the design-point ones.
+  renderPropWarnings('prop-warnings-subcooler');
 }
 
 function recompute(){
@@ -6180,6 +6296,12 @@ function boilout_compute(I){
     // For boil-out the coil approach is usually generous, so 2 iterations suffice.
     let T_out_guess = T_in_coil - 0.5 * (T_in_coil - T_bath);
     let props, U_o, Q, eps;
+    // Shell-side h_o depends only on T_bath — constant across the inner
+    // convergence iterations, so evaluate it once per step, not per iteration.
+    // (The SAME shared fluid-aware function as the subcooler, used here in
+    // heat-OUT-of-coil direction; also unifies the previously-unclamped
+    // inline copy with the clamped 200-800 base.)
+    const h_o = poolBoilHo(T_bath).h;
     for (let it = 0; it < 4; it++){
       const T_avg = 0.5 * (T_in_coil + T_out_guess);
       props = serviceProps(I.fluid, T_avg);
@@ -6194,10 +6316,6 @@ function boilout_compute(I){
       // (n=0.3 cooling, n=0.4 heating, both Dittus-Boelter.)
       const Nu = 0.023 * Math.pow(Re, 0.8) * Math.pow(Pr, 0.3) * f_helix;
       const h_i = Nu * props.k_l / (ID/12);
-      // Shell-side h_o (pool boiling — the SAME shared fluid-aware function as
-      // the subcooler, used here in heat-OUT-of-coil direction; also unifies
-      // the previously-unclamped inline copy with the clamped 200-800 base).
-      const h_o = poolBoilHo(T_bath).h;
       // Overall U_o (series resistance, referenced to outer surface)
       const ratio = OD / ID;
       const inv_U = ratio / h_i + ratio * I.fouling + R_wall + I.fouling + 1/h_o;
@@ -6285,8 +6403,9 @@ function boilout_compute(I){
     // Energy accumulation
     total_energy += Q * dt_hr;            // Btu
 
-    // Calibration tracking
-    if (T_bath > 30) extrapolated_seconds += dt_sec;
+    // Calibration tracking — the R-717 pool-boiling fit covers −25…+30 °F;
+    // count time spent outside EITHER end of that window.
+    if (T_bath > 30 || T_bath < -25) extrapolated_seconds += dt_sec;
 
     // Advance bath T
     const dT = Q_net * dt_hr / (M_bath * cp_bath);
@@ -6730,7 +6849,7 @@ function boilout_renderGeometry(I, R){
 function boilout_renderProperties(I, R){
   const Tprobe = +(document.getElementById('bo_probe_temp')?.value || 0);
   const qSel = document.getElementById('bo_probe_q')?.value || '0';
-  const engine = propEngineLive() ? 'CoolProp' : 'ASHRAE 2017 poly';
+  const engine = propSourceShort();
 
   let state, label, src;
   if (qSel === '0'){
@@ -6755,6 +6874,7 @@ function boilout_renderProperties(I, R){
     probeEl.innerHTML = `
       <div><span>Phase</span><span>${label}</span></div>
       <div><span>Probe temperature</span><span>${Tprobe.toFixed(1)} °F</span></div>
+      ${(state.T_F != null && Math.abs(state.T_F - Tprobe) > 0.1) ? `<div><span style="color:var(--ember)">⚠ Evaluated at</span><span style="color:var(--ember)">${state.T_F.toFixed(1)} °F (clamped to valid range)</span></div>` : ''}
       <div><span>Density ρ</span><span>${(state.rho_l || 0).toFixed(state.rho_l < 1 ? 4 : 2)} lb/ft³</span></div>
       <div><span>Specific heat c<sub>p</sub></span><span>${(state.cp_l || 0).toFixed(3)} Btu/lb·°F</span></div>
       <div><span>Viscosity μ</span><span>${(state.mu_l || 0).toFixed(4)} lb/ft·hr</span></div>
@@ -6883,6 +7003,8 @@ function boilout_runSweep(){
     `).join('');
     tab.innerHTML = rows;
   }
+  // Surface any clamp warnings the swept points queued.
+  renderPropWarnings('prop-warnings-boilout');
 }
 
 
@@ -7046,6 +7168,7 @@ function boilout_buildPdfReport(I, R){
   // fraction of cycle time spent outside the calibrated range.
   const extrap_pct = ((R.extrapolated_fraction || 0) * 100).toFixed(1);
   const extrap_warn = (R.extrapolated_fraction || 0) > 0.05;
+  const flux_limit = fluxLimits(I.initial_bath_temp).q_practical;   // same basis as the on-screen verdict
 
   const html = `<!DOCTYPE html>
 <html><head><meta charset="UTF-8"><title>HELIX Boil-out Cycle Report</title>
@@ -7133,6 +7256,7 @@ h2 .num{font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:.2em
   <div class="sub">${outcomeSub}</div>
 </div>
 
+${propWarningsHTML()}
 <h2><span class="num">01</span>Service Basis</h2>
 <div class="row">
   <div class="box">
@@ -7157,7 +7281,7 @@ h2 .num{font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:.2em
 </div>
 
 <h2><span class="num">02</span>Cycle Trajectory</h2>
-<div class="reasoning">Bath temperature integrated forward in time (forward-Euler, 5-second steps). Coil-side duty Q recomputed at each step from the instantaneous bath T using NTU-effectiveness. Heat loss to ambient subtracted at each step. Bath cp updated with current T from the ${refShort()} saturated-liquid property engine (${propEngineLive() ? 'CoolProp' : 'ASHRAE polynomial'}).</div>
+<div class="reasoning">Bath temperature integrated forward in time (forward-Euler, 5-second steps). Coil-side duty Q recomputed at each step from the instantaneous bath T using NTU-effectiveness. Heat loss to ambient subtracted at each step. Bath cp updated with current T from the ${refShort()} saturated-liquid property engine (${propSourceShort()}).</div>
 <div class="curve-wrap">${buildCurveSVG()}</div>
 <div class="reasoning">Bath T (blue solid) rises asymptotically toward the steady-state equilibrium. Coil duty Q (red dashed) starts at peak when ΔT is largest and decays as the bath warms. The cycle is reported as complete when bath T reaches the target.</div>
 
@@ -7172,7 +7296,7 @@ h2 .num{font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:.2em
 
 <h2><span class="num">04</span>Shell-Side h<sub>o</sub> &amp; Overall U<sub>o</sub></h2>
 <div class="reasoning">Pool-boiling ${refShort()} on plain-steel horizontal tubes. The linear-in-bath-T correlation is calibrated to three industrial R-717 reference designs over −25 to +30 °F bath, plain steel, at fluxes 2,000–6,000 Btu/hr·ft²${refIsNH3() ? '' : ', scaled for ' + refShort() + ' by the Mostinski reduced-pressure ratio (an uncalibrated engineering estimate)'}. Above +30 °F bath, the prediction extrapolates.</div>
-<div class="formula">h<sub>o</sub>(T<sub>bath</sub>) = clamp(200…800, 3.6107·T<sub>bath</sub> + 409.19)${refIsNH3() ? '' : ' × Mostinski(' + refShort() + '/R-717)'}
+<div class="formula">h<sub>o</sub>(T<sub>bath</sub>) = ${poolBoilFormulaHTML()}${refIsNH3() ? '' : ' × Mostinski(' + refShort() + '/R-717)'}
 h<sub>o</sub> at cycle start (T<sub>bath</sub> = ${I.initial_bath_temp} °F)  =  <span class="ans">${poolBoilHo(I.initial_bath_temp).h.toFixed(0)} Btu/hr·ft²·°F</span>
 h<sub>o</sub> at cycle end (T<sub>bath</sub> = ${I.target_bath_temp} °F)    =  <span class="ans">${poolBoilHo(I.target_bath_temp).h.toFixed(0)} Btu/hr·ft²·°F</span>
 U<sub>o</sub> at cycle start (peak Q point)               =  <span class="ans">${R.init?.U_o?.toFixed(1) || '—'} Btu/hr·ft²·°F</span></div>
@@ -7201,7 +7325,7 @@ ${extrap_warn ? `<div class="warning-banner"><strong style="font-style:normal">�
 <div class="verdict-grid">
   <div class="verdict ${R.reached_target ? 'pass' : 'fail'}"><div class="name">Target Reached</div><div class="text">${R.reached_target ? `Yes · ${R.cycle_min.toFixed(1)} min` : 'NO'}</div></div>
   <div class="verdict ${envelope && inEnvelope ? 'pass' : envelope ? 'warn' : 'info'}"><div class="name">Preset Envelope</div><div class="text">${envelope ? `${envelope.min_min}–${envelope.max_min} min ${inEnvelope ? '✓' : '⚠'}` : 'N/A'}</div></div>
-  <div class="verdict ${R.peak_flux < 0.8*fluxLimits(I.initial_bath_temp).q_practical ? 'pass' : R.peak_flux < fluxLimits(I.initial_bath_temp).q_practical ? 'warn' : 'fail'}"><div class="name">Peak Heat Flux</div><div class="text">${R.peak_flux.toFixed(0)} Btu/hr·ft²</div></div>
+  <div class="verdict ${R.peak_flux < 0.8*flux_limit ? 'pass' : R.peak_flux < flux_limit ? 'warn' : 'fail'}"><div class="name">Peak Heat Flux</div><div class="text">${R.peak_flux.toFixed(0)} Btu/hr·ft² · limit ${Math.round(flux_limit).toLocaleString('en-US')}</div></div>
   <div class="verdict ${R.net_submergence_in >= 0 ? 'pass' : 'warn'}"><div class="name">Submergence</div><div class="text">${R.net_submergence_in.toFixed(1)} in</div></div>
   <div class="verdict ${R.vessel_radial_clear >= I.clearance ? 'pass' : 'fail'}"><div class="name">Clearance</div><div class="text">${R.vessel_radial_clear.toFixed(2)} in</div></div>
   <div class="verdict ${R.init?.V_fps >= 3 && R.init?.V_fps <= 80 ? 'pass' : 'warn'}"><div class="name">Velocity</div><div class="text">${R.init?.V_fps?.toFixed(2) || '—'} ft/s</div></div>
@@ -8287,7 +8411,7 @@ function hr_renderProperties(I, R){
   if (side === 'bath'){
     state = refSat(Tprobe);
     label = 'Saturated Liquid ' + refShort() + ' (bath side)';
-    src = 'refSat() · ' + (propEngineLive() ? 'CoolProp' : 'ASHRAE 2017 poly');
+    src = 'refSat() · ' + propSourceShort();
   } else {
     state = (typeof serviceProps === 'function') ? serviceProps(I.fluid, Tprobe) : refSat(Tprobe);
     const fluid_label = (typeof HR_FLUID_LABEL !== 'undefined' && HR_FLUID_LABEL[I.fluid]) || I.fluid;
@@ -8300,6 +8424,7 @@ function hr_renderProperties(I, R){
     probeEl.innerHTML = `
       <div><span>Phase / Fluid</span><span>${label}</span></div>
       <div><span>Probe temperature</span><span>${Tprobe.toFixed(1)} °F</span></div>
+      ${(side === 'bath' && state.T_F != null && Math.abs(state.T_F - Tprobe) > 0.1) ? `<div><span style="color:var(--ember)">⚠ Evaluated at</span><span style="color:var(--ember)">${state.T_F.toFixed(1)} °F (clamped to valid range)</span></div>` : ''}
       <div><span>Density ρ</span><span>${(state.rho_l || 0).toFixed(2)} lb/ft³</span></div>
       <div><span>Specific heat c<sub>p</sub></span><span>${(state.cp_l || 0).toFixed(3)} Btu/lb·°F</span></div>
       <div><span>Viscosity μ</span><span>${(state.mu_l || 0).toFixed(4)} lb/ft·hr</span></div>
@@ -8427,6 +8552,8 @@ function hr_runSweep(){
       </div>
     `).join('');
   }
+  // Surface any clamp warnings the swept points queued.
+  renderPropWarnings('prop-warnings-hr');
 }
 
 
@@ -8528,6 +8655,7 @@ h2 .num{font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:.2em
 
 ${R.direction_invalid ? `<div class="warning-banner"><strong style="font-style:normal">⚠ Direction invalid.</strong> The bath (${I.bath_temp} °F) is not warmer than the tube inlet (${I.tube_inlet_temp} °F). Heat recovery requires bath &gt; inlet. For bath ≤ inlet, use the Subcooler tab instead.</div>` : ''}
 
+${propWarningsHTML()}
 <h2><span class="num">01</span>Service Basis</h2>
 <div class="row">
   <div class="box">
@@ -8909,12 +9037,20 @@ if (inP) inP.addEventListener('input', recompute);
   const resetBtn = $('bo-reset');
   if (resetBtn) resetBtn.addEventListener('click', () => boilout_applyPreset(presetSel.value));
 
-  // Patch E1 — probe controls trigger only the NH3 Props panel update (no re-solve)
+  // Patch E1 — probe controls trigger only the Refrigerant Props panel update
+  // (no re-solve). If the cached result was computed under a DIFFERENT
+  // refrigerant (a fluid switch whose recompute failed), re-solve instead of
+  // rendering stale-fluid numbers under the new fluid's labels; and repaint
+  // the warning banner so clamped probe states are visibly flagged.
   const probeT = $('bo_probe_temp');
   const probeQ = $('bo_probe_q');
   const refreshProbe = () => {
     const last = window._bo_last;
-    if (last) try { boilout_renderProperties(last.I, last.R); } catch(e){}
+    if (last && last.I.refrigerant !== REF_KEY){ boilout_recompute(); return; }
+    if (last) try {
+      boilout_renderProperties(last.I, last.R);
+      renderPropWarnings('prop-warnings-boilout');
+    } catch(e){}
   };
   if (probeT) probeT.addEventListener('input', refreshProbe);
   if (probeQ) probeQ.addEventListener('change', refreshProbe);
@@ -8923,13 +9059,16 @@ if (inP) inP.addEventListener('input', recompute);
   const sweepBtn = $('bo-run-sweep');
   if (sweepBtn) sweepBtn.addEventListener('click', boilout_runSweep);
 
-  // Patch E2 — PDF report button
+  // Patch E2 — PDF report button. Recompute fresh at export time: the report
+  // template reads live fluid labels/engine state, so a stale cache must never
+  // be dressed up under the current refrigerant's header.
   const pdfBtn = $('bo-pdf');
   if (pdfBtn) pdfBtn.addEventListener('click', () => {
     try {
+      boilout_recompute();
       const last = window._bo_last;
-      if (!last){
-        alert('Run a Boil-out compute first, then generate the PDF.');
+      if (!last || last.I.refrigerant !== REF_KEY){
+        alert('Boil-out compute failed for the selected refrigerant — cannot generate the PDF.');
         return;
       }
       boilout_buildPdfReport(last.I, last.R);
@@ -9018,12 +9157,17 @@ if (inP) inP.addEventListener('input', recompute);
     });
   }
 
-  // Patch E3 — probe controls trigger only the NH3 Props panel update (no re-solve)
+  // Patch E3 — probe controls trigger only the Refrigerant Props panel update
+  // (no re-solve). Same stale-fluid guard + warning repaint as the boil-out tab.
   const probeT = $('hr_probe_temp');
   const probeSide = $('hr_probe_side');
   const refreshProbe = () => {
     const last = window._hr_last;
-    if (last) try { hr_renderProperties(last.I, last.R); } catch(e){}
+    if (last && last.I.refrigerant !== REF_KEY){ hr_recompute(); return; }
+    if (last) try {
+      hr_renderProperties(last.I, last.R);
+      renderPropWarnings('prop-warnings-hr');
+    } catch(e){}
   };
   if (probeT) probeT.addEventListener('input', refreshProbe);
   if (probeSide) probeSide.addEventListener('change', refreshProbe);
@@ -9032,13 +9176,15 @@ if (inP) inP.addEventListener('input', recompute);
   const sweepBtn = $('hr-run-sweep');
   if (sweepBtn) sweepBtn.addEventListener('click', hr_runSweep);
 
-  // Patch E3 — PDF report button
+  // Patch E3 — PDF report button. Recompute fresh at export time (see the
+  // boil-out PDF handler for why).
   const pdfBtn = $('hr-pdf');
   if (pdfBtn) pdfBtn.addEventListener('click', () => {
     try {
+      hr_recompute();
       const last = window._hr_last;
-      if (!last){
-        alert('Run a Heat Recovery compute first, then generate the PDF.');
+      if (!last || last.I.refrigerant !== REF_KEY){
+        alert('Heat Recovery compute failed for the selected refrigerant — cannot generate the PDF.');
         return;
       }
       hr_buildPdfReport(last.I, last.R);
