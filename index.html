@@ -848,7 +848,7 @@ footer .seal svg{width: 22px; height: 22px}
 <!-- ============ REFRIGERANT BAR — global working-fluid selector ============ -->
 <div class="refrigerant-bar">
   <div class="services-label">Refrigerant</div>
-  <select id="refrigerant" disabled title="Working fluid for all thermodynamic calculations (loading property engine…)">
+  <select id="refrigerant" autocomplete="off" disabled title="Working fluid for all thermodynamic calculations (loading property engine…)">
     <option value="R717" selected>R-717 · Ammonia</option>
     <option value="R134A">R-134a · HFC-134a</option>
     <option value="R22">R-22 · HCFC-22</option>
@@ -3266,7 +3266,7 @@ function initCoolPropEngine(module){
   // metadata failed to build stay selectable-off.
   let saved = null;
   try { saved = localStorage.getItem('helix_refrigerant'); } catch(e){}
-  if (saved && REFRIGERANTS[saved] && CP_META[saved]) REF_KEY = saved;
+  REF_KEY = (saved && REFRIGERANTS[saved] && CP_META[saved]) ? saved : 'R717';   // default is ALWAYS R-717 when nothing valid is persisted
   const sel = $('refrigerant');
   if (sel){
     sel.disabled = false;
@@ -3295,10 +3295,13 @@ function coolPropEngineFailed(err){
 }
 
 function setRefrigerant(key){
-  if (!REFRIGERANTS[key] || key === REF_KEY) return;
-  if (!CP && key !== 'R717') return;             // locked to R-717 until engine loads
-  if (CP && CP_META && !CP_META[key]) return;    // fluid whose metadata failed to build
+  const sel = $('refrigerant');
+  const snapBack = () => { if (sel && sel.value !== REF_KEY) sel.value = REF_KEY; };
+  if (!REFRIGERANTS[key] || key === REF_KEY){ snapBack(); return; }
+  if (!CP && key !== 'R717'){ snapBack(); return; }             // locked to R-717 until engine loads
+  if (CP && CP_META && !CP_META[key]){ snapBack(); return; }    // fluid whose metadata failed to build
   REF_KEY = key;
+  if (sel && sel.value !== key) sel.value = key;   // keep the dropdown in lockstep with state on programmatic calls
   try { localStorage.setItem('helix_refrigerant', key); } catch(e){}
   try { refreshFluidLabels(); } catch(e){ console.error('label refresh failed:', e); }
   recomputeAllTabs();
