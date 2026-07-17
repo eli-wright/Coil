@@ -238,6 +238,7 @@ body::before{
   color: #d97757; margin-bottom: 6px;
 }
 .prop-warnings .pw-item{margin-top: 3px;}
+.calib-estimate-note{margin-top:8px;padding:8px 12px;border-left:3px solid #c0700e;background:rgba(192,112,14,0.07);color:#c98a2e;font-family:'Cormorant Garamond',serif;font-size:14px;font-style:italic;line-height:1.45}
 
 /* ---------- COMING-SOON PANELS ---------- */
 .soon-shell{
@@ -798,7 +799,7 @@ footer .seal svg{width: 22px; height: 22px}
     </div>
     <div class="meta-stamp">
       Edition &nbsp;·&nbsp; MMXXVI<br>
-      <span class="num">№ 001 — Calibrated</span>
+      <span class="num" id="edition-stamp">№ 001 — Calibrated</span>
     </div>
   </div>
 
@@ -825,7 +826,7 @@ footer .seal svg{width: 22px; height: 22px}
   <div class="hero-sub">
     <span id="hero-ref-chip">R-717 Native</span>
     <span>CoolProp-Backed</span>
-    <span>3-Case Calibrated · R-717</span>
+    <span id="hero-calib-chip">3-Case Calibrated · R-717</span>
     <span>IIAR / ASHRAE 15 Aware</span>
   </div>
 </header>
@@ -2450,7 +2451,7 @@ footer .seal svg{width: 22px; height: 22px}
   <span>HELIX · An Atelier for Refrigeration Engineers</span>
   <span class="seal">
     <svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="#c8a564" stroke-width="1"/><circle cx="12" cy="12" r="3" fill="#c8a564"/></svg>
-    R-717 calibrated to 3 reference designs · ±0.2°F
+    <span id="footer-calib-chip">R-717 calibrated to 3 reference designs · ±0.2°F</span>
   </span>
   <span>Multi-Refrigerant · CoolProp-Backed</span>
 </footer>
@@ -2770,6 +2771,10 @@ function _K2F(K){ return (K - 273.15)*1.8 + 32; }
 function refShort(key){ return REFRIGERANTS[key || REF_KEY].short; }
 function refFullName(key){ const r = REFRIGERANTS[key || REF_KEY]; return r.short + ' · ' + r.name; }
 function refIsNH3(){ return REF_KEY === 'R717'; }
+// FIX: single source of truth for calibration-status wording (FIX 1 + FIX 2).
+function calibShortLabel(){ return refIsNH3() ? '3-Case Calibrated · ±0.2 °F · R-717' : 'Uncalibrated Estimate · Mostinski-Scaled'; }
+function calibDisclosureText(){ return refIsNH3() ? '' : ' Shell-side pool-boiling h_o for ' + refShort() + ' is an estimate — not calibrated for this fluid (Mostinski scaling of the R-717 base; only R-717 is 3-case calibrated).'; }
+function calibDisclosureHTML(){ return refIsNH3() ? '' : '<div class="calib-estimate-note">⚠ ' + calibDisclosureText().trim() + '</div>'; }
 function propEngineLive(){ return !!CP; }
 function propSourceLabel(){
   return CP ? ('CoolProp ' + (CP_META && CP_META._version ? CP_META._version : '') + ' · Helmholtz EOS').replace('  ',' ')
@@ -3321,6 +3326,9 @@ function refreshFluidLabels(){
   set('hero-ref-chip', CP ? refFullName() : 'R-717 Native');
   set('props-head-sub', r.name + ' Properties · ' + r.short);
   set('bo-props-head', r.name + ' Properties · ' + r.short);
+  set('edition-stamp', refIsNH3() ? '№ 001 — Calibrated' : '№ 001 — Estimated');
+  set('hero-calib-chip', calibShortLabel());
+  set('footer-calib-chip', calibShortLabel());
 
   const meta = $('ref-meta');
   if (meta){
@@ -4410,6 +4418,7 @@ function render(I, R){
       <span class="crit-badge ${c.badge}">${c.text}</span>
     </div>
   `).join("");
+  if (I.shell_mode === 'pool_boil') $('criteria-list').innerHTML += calibDisclosureHTML();
 
   // ─── Patch C · Flash-margin status (under the inlet-pressure field) ─────
   const fs = $('flash-status');
@@ -4492,7 +4501,7 @@ function render(I, R){
       const pbScale = poolBoilScale(T_bath);
       const scaleNote = refIsNH3()
         ? ''
-        : ` For ${refShort()}, that R-717 base is scaled by a Mostinski reduced-pressure ratio (×${pbScale.toFixed(2)} here) — an engineering estimate without field calibration; treat results accordingly.`;
+        : ` (×${pbScale.toFixed(2)} scale here).` + calibDisclosureText();
       calib.style.display = 'block';
       calib.innerHTML = `
         <div style="font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.18em;text-transform:uppercase;color:var(--brass);margin-bottom:8px">◇ Calibration scope · Pool-boiling ${refShort()}</div>
@@ -4973,7 +4982,7 @@ function renderProperties(I, R){
   // Add the clarifying caveat below the state grid
   const propsCaveat = document.getElementById('props-caveat');
   if (propsCaveat) {
-    propsCaveat.innerHTML = `<em>P<sub>sat</sub> at inlet and outlet temperatures is a saturation reference only — not the actual pressure inside the coil. The HP-liquid stream remains at the receiver pressure (≈ ${sIn.P_psia.toFixed(0)} psia) throughout, less ${R.dP_psi.toFixed(2)} psi of friction loss. Only the bath operates at its saturation pressure.</em>`;
+    propsCaveat.innerHTML = `<em>P<sub>sat</sub> at inlet and outlet temperatures is a saturation reference only — not the actual pressure inside the coil. The HP-liquid stream remains at the receiver pressure (≈ ${sIn.P_psia.toFixed(0)} psia) throughout, less ${R.dP_psi.toFixed(2)} psi of friction loss. Only the bath operates at its saturation pressure.</em>` + calibDisclosureHTML();
   }
 }
 
@@ -5171,7 +5180,7 @@ Re = G·D<sub>i</sub>/μ = ${G_calc.toFixed(0)}×${(R.ID/12).toFixed(4)}/${R.pro
 h<sub>i</sub> = Nu·k/D<sub>i</sub> = ${Nu_calc.toFixed(1)}×${R.props.k_l.toFixed(4)}/${(R.ID/12).toFixed(4)}  =  <span class="ans">${fmt(R.h_i,0)} BTU/hr·ft²·°F</span></div>
 
 <h2><span class="num">03</span>Shell-Side · h<sub>o</sub></h2>
-<div class="reasoning">${I.shell_mode === 'pool_boil' ? 'Pool-boiling ' + refShort() + ' on plain-steel horizontal tubes. Empirical correlation linear in bath temperature, calibrated to three industrial R-717 reference designs spanning bath T = −20 °F to +30 °F (±0.3 °F outlet)' + (refIsNH3() ? '.' : ', scaled ×' + poolBoilScale(I.bath_temp).toFixed(2) + ' for ' + refShort() + ' by Mostinski reduced-pressure ratio — an uncalibrated engineering estimate.') : I.shell_mode === 'forced_annular' ? 'Patil/Shende/Ghosh 1982 (Chem. Eng. Dec 13) annular HCHE correlation. Shell fluid forced through annulus between cylinders B and C, crossing the helical coil.' : I.shell_mode === 'dry_vapor' ? 'Dry / non-submerged rating per customer request: the coil is treated as fully exposed above the liquid level, transferring heat by free convection to saturated ' + refShort() + ' <em>vapor</em> (Churchill-Chu horizontal cylinder, ideal-gas β = 1/T<sub>abs</sub>). Vapor-side h<sub>o</sub> is far below the pool-boiling value, so it dominates the resistance network and subcooling is minimal. This rating is conservative for sizing.' : 'Free convection on horizontal tube in a static bath. Conservative typical value; field verification recommended.'}</div>
+<div class="reasoning">${I.shell_mode === 'pool_boil' ? 'Pool-boiling ' + refShort() + ' on plain-steel horizontal tubes. Empirical correlation linear in bath temperature, calibrated to three industrial R-717 reference designs spanning bath T = −20 °F to +30 °F (±0.3 °F outlet)' + (refIsNH3() ? '.' : ', scaled ×' + poolBoilScale(I.bath_temp).toFixed(2) + ' for ' + refShort() + ' by Mostinski reduced-pressure ratio.' + calibDisclosureText()) : I.shell_mode === 'forced_annular' ? 'Patil/Shende/Ghosh 1982 (Chem. Eng. Dec 13) annular HCHE correlation. Shell fluid forced through annulus between cylinders B and C, crossing the helical coil.' : I.shell_mode === 'dry_vapor' ? 'Dry / non-submerged rating per customer request: the coil is treated as fully exposed above the liquid level, transferring heat by free convection to saturated ' + refShort() + ' <em>vapor</em> (Churchill-Chu horizontal cylinder, ideal-gas β = 1/T<sub>abs</sub>). Vapor-side h<sub>o</sub> is far below the pool-boiling value, so it dominates the resistance network and subcooling is minimal. This rating is conservative for sizing.' : 'Free convection on horizontal tube in a static bath. Conservative typical value; field verification recommended.'}</div>
 <div class="formula">${I.shell_mode === 'pool_boil' ? `h<sub>o</sub> = ${poolBoilFormulaHTML()}${refIsNH3() ? '' : ` × ${poolBoilScale(I.bath_temp).toFixed(3)} (Mostinski, ${refShort()}/R-717)`}  =  <span class="ans">${fmt(R.h_o,0)} BTU/hr·ft²·°F</span>` : I.shell_mode === 'dry_vapor' ? `h<sub>o</sub> = Churchill-Chu free convection to ${refShort()} vapor (β = 1/T<sub>abs</sub>)  =  <span class="ans">${fmt(R.h_o,1)} BTU/hr·ft²·°F</span>` : `h<sub>o</sub>  =  <span class="ans">${fmt(R.h_o,0)} BTU/hr·ft²·°F</span>  (${I.shell_mode})`}</div>
 
 <h2><span class="num">04</span>Overall U<sub>o</sub></h2>
@@ -5246,7 +5255,7 @@ ${I.shell_mode === 'dry_vapor' ? `<div class="reasoning" style="background:#fff3
   <div class="verdict ${R.pitch_clearance >= 1.0 ? 'pass' : R.pitch_clearance >= 0.5 ? 'warn' : 'fail'}"><div class="name">Pitch Gap</div><div class="text">${R.pitch_clearance.toFixed(2)} in</div></div>
 </div>
 
-<div class="note"><b style="color:#3a2e15">Methodology:</b> Tube-side h<sub>i</sub> via Dittus-Boelter + ${I.helical_corr} helical correction, Sieder-Tate viscosity correction ${I.visc_corr}. Shell-side h<sub>o</sub> via ${I.shell_mode === 'pool_boil' ? 'pool-boiling correlation calibrated to three industrial R-717 reference designs (±0.3 °F)' + (refIsNH3() ? '' : ', Mostinski-scaled for ' + refShort()) : I.shell_mode === 'forced_annular' ? 'Patil/Shende/Ghosh 1982 annular flow correlation' : I.shell_mode === 'dry_vapor' ? 'Churchill-Chu free convection to saturated ' + refShort() + ' vapor (coil treated as fully exposed / non-submerged)' : 'free-convection estimate'}. Pressure drop via Ito helical-turbulent. ${refShort()} properties from ${propEngineLive() ? 'CoolProp (Helmholtz-EOS, REFPROP-grade)' : 'polynomial fits to ASHRAE 2017 tables, &lt;1% error'}. R-717 calibration validity: bath −25 °F to +50 °F; HP liquid 50 °F to 110 °F.</div>
+<div class="note"><b style="color:#3a2e15">Methodology:</b> Tube-side h<sub>i</sub> via Dittus-Boelter + ${I.helical_corr} helical correction, Sieder-Tate viscosity correction ${I.visc_corr}. Shell-side h<sub>o</sub> via ${I.shell_mode === 'pool_boil' ? 'pool-boiling correlation calibrated to three industrial R-717 reference designs (±0.3 °F)' + (refIsNH3() ? '' : ', Mostinski-scaled for ' + refShort() + ' (estimate — not calibrated for this fluid)') : I.shell_mode === 'forced_annular' ? 'Patil/Shende/Ghosh 1982 annular flow correlation' : I.shell_mode === 'dry_vapor' ? 'Churchill-Chu free convection to saturated ' + refShort() + ' vapor (coil treated as fully exposed / non-submerged)' : 'free-convection estimate'}. Pressure drop via Ito helical-turbulent. ${refShort()} properties from ${propEngineLive() ? 'CoolProp (Helmholtz-EOS, REFPROP-grade)' : 'polynomial fits to ASHRAE 2017 tables, &lt;1% error'}. R-717 calibration validity: bath −25 °F to +50 °F; HP liquid 50 °F to 110 °F.</div>
 
 <div class="signature">
   <div class="sig-block">
@@ -5257,7 +5266,7 @@ ${I.shell_mode === 'dry_vapor' ? `<div class="reasoning" style="background:#fff3
   </div>
 </div>
 
-<div class="footer">HELIX · Refrigerant Coil Engineering Atelier · ${refFullName()} · R-717 calibration: 3 industrial reference designs ±0.2°F</div>
+<div class="footer">HELIX · Refrigerant Coil Engineering Atelier · ${refFullName()} · ${refIsNH3() ? 'R-717 calibration: 3 industrial reference designs ±0.2°F' : refShort() + ': uncalibrated Mostinski-scaled estimate (R-717-only calibration)'}</div>
 </div></body></html>`;
 
   const win = window.open('', '_blank', 'width=900,height=1100,scrollbars=yes');
@@ -6663,7 +6672,7 @@ function boilout_render(I, R){
   if (calib){
     if (R.extrapolated_fraction > 0.05 && R.reached_target){
       calib.style.display = 'block';
-      calib.innerHTML = `<strong style="color:#c0700e">Calibration caveat.</strong> ${(R.extrapolated_fraction*100).toFixed(0)}% of the cycle ran with bath T above +30 °F, which extrapolates the shell-side pool-boiling correlation beyond its R-717-calibrated range${refIsNH3() ? '' : ' (already an uncalibrated Mostinski-scaled estimate for ' + refShort() + ')'}. Confidence: moderate. Recommend validating against measured cycle time on the first installation before relying on this prediction for production sizing.`;
+      calib.innerHTML = `<strong style="color:#c0700e">Calibration caveat.</strong> ${(R.extrapolated_fraction*100).toFixed(0)}% of the cycle ran with bath T above +30 °F, which extrapolates the shell-side pool-boiling correlation beyond its R-717-calibrated range${refIsNH3() ? '' : ' (an estimate — not calibrated for ' + refShort() + ')'}. Confidence: moderate. Recommend validating against measured cycle time on the first installation before relying on this prediction for production sizing.`;
     } else {
       calib.style.display = 'none';
     }
@@ -6903,8 +6912,8 @@ function boilout_renderProperties(I, R){
   const caveatEl = document.getElementById('bo-props-caveat');
   if (caveatEl){
     caveatEl.innerHTML = `
-      <strong style="color:var(--paper);font-style:normal">Notes.</strong> The bath state changes continuously during the cycle as T<sub>bath</sub> rises from ${R.T_init_bath.toFixed(1)} °F to ${R.T_target_bath.toFixed(1)} °F. Pool-boiling shell-side h<sub>o</sub> is updated each integration step using the current bath T (R-717 calibration: −25 to +30 °F${refIsNH3() ? '' : '; Mostinski-scaled for ' + refShort()}). When bath T exceeds the calibrated range, the duty estimate is an extrapolation — see the calibration banner on the Sizer tab for the fraction of cycle time spent above the calibration ceiling.
-    `;
+      <strong style="color:var(--paper);font-style:normal">Notes.</strong> The bath state changes continuously during the cycle as T<sub>bath</sub> rises from ${R.T_init_bath.toFixed(1)} °F to ${R.T_target_bath.toFixed(1)} °F. Pool-boiling shell-side h<sub>o</sub> is updated each integration step using the current bath T (R-717 calibration: −25 to +30 °F${refIsNH3() ? '' : '; Mostinski-scaled for ' + refShort() + ' — estimate, not calibrated for this fluid'}). When bath T exceeds the calibrated range, the duty estimate is an extrapolation — see the calibration banner on the Sizer tab for the fraction of cycle time spent above the calibration ceiling.
+    ` + calibDisclosureHTML();
   }
 }
 
@@ -7092,6 +7101,7 @@ function boilout_renderVerdict(I, R){
     row('Peak Heat Flux',
         `${R.peak_flux.toFixed(0)} Btu/hr·ft² · guideline < ${Math.round(flux_limit).toLocaleString('en-US')} (heating, ${refShort()})`,
         tri(R.peak_flux < 0.8*flux_limit, R.peak_flux < flux_limit));
+  grid.innerHTML += calibDisclosureHTML();
 }
 
 
@@ -7295,7 +7305,7 @@ ${propWarningsHTML()}
 </div>
 
 <h2><span class="num">04</span>Shell-Side h<sub>o</sub> &amp; Overall U<sub>o</sub></h2>
-<div class="reasoning">Pool-boiling ${refShort()} on plain-steel horizontal tubes. The linear-in-bath-T correlation is calibrated to three industrial R-717 reference designs over −25 to +30 °F bath, plain steel, at fluxes 2,000–6,000 Btu/hr·ft²${refIsNH3() ? '' : ', scaled for ' + refShort() + ' by the Mostinski reduced-pressure ratio (an uncalibrated engineering estimate)'}. Above +30 °F bath, the prediction extrapolates.</div>
+<div class="reasoning">Pool-boiling ${refShort()} on plain-steel horizontal tubes. The linear-in-bath-T correlation is calibrated to three industrial R-717 reference designs over −25 to +30 °F bath, plain steel, at fluxes 2,000–6,000 Btu/hr·ft²${refIsNH3() ? '' : ', scaled for ' + refShort() + ' by the Mostinski reduced-pressure ratio (estimate — not calibrated for this fluid)'}. Above +30 °F bath, the prediction extrapolates.</div>
 <div class="formula">h<sub>o</sub>(T<sub>bath</sub>) = ${poolBoilFormulaHTML()}${refIsNH3() ? '' : ' × Mostinski(' + refShort() + '/R-717)'}
 h<sub>o</sub> at cycle start (T<sub>bath</sub> = ${I.initial_bath_temp} °F)  =  <span class="ans">${poolBoilHo(I.initial_bath_temp).h.toFixed(0)} Btu/hr·ft²·°F</span>
 h<sub>o</sub> at cycle end (T<sub>bath</sub> = ${I.target_bath_temp} °F)    =  <span class="ans">${poolBoilHo(I.target_bath_temp).h.toFixed(0)} Btu/hr·ft²·°F</span>
@@ -7330,6 +7340,7 @@ ${extrap_warn ? `<div class="warning-banner"><strong style="font-style:normal">�
   <div class="verdict ${R.vessel_radial_clear >= I.clearance ? 'pass' : 'fail'}"><div class="name">Clearance</div><div class="text">${R.vessel_radial_clear.toFixed(2)} in</div></div>
   <div class="verdict ${R.init?.V_fps >= 3 && R.init?.V_fps <= 80 ? 'pass' : 'warn'}"><div class="name">Velocity</div><div class="text">${R.init?.V_fps?.toFixed(2) || '—'} ft/s</div></div>
 </div>
+${refIsNH3() ? '' : '<div class="note" style="border-left:3px solid #c0700e"><b style="color:#3a2e15">Estimate disclosure:</b>' + calibDisclosureText() + '</div>'}
 
 <h2><span class="num">07</span>Construction Views</h2>
 <div style="display:flex;gap:14px;align-items:flex-start;margin-top:6px">
@@ -7340,7 +7351,7 @@ ${extrap_warn ? `<div class="warning-banner"><strong style="font-style:normal">�
 
 <h2><span class="num">08</span>Methodology &amp; Scope</h2>
 <div class="note">
-  <strong style="font-style:normal;color:#3a2e15">Modeled:</strong> Lumped-capacitance bath energy balance (forward-Euler, 5-second steps); coil-side Dittus-Boelter + Schmidt helical correction; pool-boiling shell-side at instantaneous bath T (linear R-717 correlation calibrated −25 to +30 °F${refIsNH3() ? '' : ', Mostinski-scaled for ' + refShort()}); heat-loss to ambient through insulated vessel shell; asymptote detection; bath c<sub>p</sub> updated each step from current T.
+  <strong style="font-style:normal;color:#3a2e15">Modeled:</strong> Lumped-capacitance bath energy balance (forward-Euler, 5-second steps); coil-side Dittus-Boelter + Schmidt helical correction; pool-boiling shell-side at instantaneous bath T (linear R-717 correlation calibrated −25 to +30 °F${refIsNH3() ? '' : ', Mostinski-scaled for ' + refShort() + ' — estimate, not calibrated for this fluid'}); heat-loss to ambient through insulated vessel shell; asymptote detection; bath c<sub>p</sub> updated each step from current T.
   <br><br>
   <strong style="font-style:normal;color:#3a2e15">Not modeled:</strong> Two-phase coil-side flow (notably: hot-gas defrost predictions assume single-phase vapor convection; real condensation enhancement yields h<sub>i</sub> several-fold higher — R-717 experience: 5–10×, cycle 30–50% faster — so predictions are conservative for sizing); bath vaporization mass loss; transient pressure-side dynamics; oil-layer effect on h<sub>o</sub>; coil flooding/draining transient at cycle start.
   <br><br>
@@ -8092,6 +8103,7 @@ function hr_renderVerdict(I, R){
     row('Coil Fits Shell',
         `${R.coil_height_in.toFixed(1)} in tall · ${R.vessel_ss_in.toFixed(0)} in S/S available`,
         tri(R.coil_height_in <= R.vessel_ss_in*0.95, R.coil_height_in <= R.vessel_ss_in));
+  grid.innerHTML += refIsNH3() ? '' : '<div class="calib-estimate-note">⚠ Property-based estimate for ' + refShort() + ' — the tool\'s ±0.2 °F field calibration covers R-717 only.</div>';
 }
 
 
@@ -8458,7 +8470,7 @@ function hr_renderProperties(I, R){
   if (caveatEl){
     caveatEl.innerHTML = `
       <strong style="color:var(--paper);font-style:normal">Notes.</strong> The shell-side mechanism is Churchill-Chu natural convection on a horizontal cylinder — NOT pool boiling. The bath behaves as the warm side with a slowly-moving thermal boundary layer near the tube wall. h<sub>o</sub> depends on |T<sub>wall</sub> − T<sub>bath</sub>|, which is iteratively converged. ${R.f_sub < 1 ? `<em style="color:#c0700e">⚠ Partial submergence active: ${(R.f_sub*100).toFixed(0)}% of the coil is below the liquid level after a 6″ swell allowance. Exposed turns are treated as vapor-side free convection (h<sub>o,exposed</sub> ≈ ${R.h_o_exposed?.toFixed(1)} Btu/hr·ft²·°F).</em>` : ''}
-    `;
+    ` + (refIsNH3() ? '' : '<div class="calib-estimate-note">⚠ Property-based estimate for ' + refShort() + ' — the tool\'s ±0.2 °F field calibration covers R-717 only.</div>');
   }
 }
 
@@ -8715,6 +8727,7 @@ Check: U·A·LMTD = ${R.U_o.toFixed(1)}×${R.A_o.toFixed(1)}×${R.LMTD.toFixed(2
   ${R.sizing_mode_duty ? `<div class="verdict ${R.margin_duty>=10 ? 'pass' : R.margin_duty>=0 ? 'warn' : 'fail'}"><div class="name">Duty Margin</div><div class="text">${R.margin_duty.toFixed(1)}%</div></div>` : ''}
   ${R.sizing_mode_outlet ? `<div class="verdict ${R.margin_outlet>=0 ? 'pass' : 'fail'}"><div class="name">Outlet Margin</div><div class="text">${R.margin_outlet >= 0 ? '+' : ''}${R.margin_outlet.toFixed(1)} °F</div></div>` : ''}
 </div>
+${refIsNH3() ? '' : '<div class="note" style="border-left:3px solid #c0700e"><b style="color:#3a2e15">Estimate disclosure:</b> Property-based estimate for ' + refShort() + ' — the tool\'s ±0.2 °F field calibration covers R-717 only.</div>'}
 
 <h2><span class="num">06</span>Construction Views</h2>
 <div style="display:flex;gap:14px;align-items:flex-start;margin-top:6px">
@@ -8741,7 +8754,7 @@ Check: U·A·LMTD = ${R.U_o.toFixed(1)}×${R.A_o.toFixed(1)}×${R.LMTD.toFixed(2
   </div>
 </div>
 
-<div class="footer">HELIX · Refrigerant Coil Engineering Atelier · ${refFullName()} · Heat Recovery · Churchill-Chu natural convection · ${propEngineLive() ? 'CoolProp fluid properties' : 'ASHRAE-grade fluid properties'}</div>
+<div class="footer">HELIX · Refrigerant Coil Engineering Atelier · ${refFullName()} · Heat Recovery · Churchill-Chu natural convection · ${propEngineLive() ? 'CoolProp fluid properties' : 'ASHRAE-grade fluid properties'} · ${refIsNH3() ? 'R-717 3-case calibrated' : refShort() + ' property-based estimate'}</div>
 </div></body></html>`;
 
   const win = window.open('', '_blank', 'width=900,height=1100,scrollbars=yes');
